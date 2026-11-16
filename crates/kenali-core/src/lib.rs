@@ -9,8 +9,10 @@
 pub mod config;
 pub mod frame;
 pub mod policy;
+pub mod scenarios;
 pub mod score;
 pub mod secret;
 pub mod state;
 pub mod strings;
+pub mod tiles;
 pub mod types;
