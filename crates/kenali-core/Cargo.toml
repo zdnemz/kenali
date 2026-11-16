@@ -1,0 +1,20 @@
+[package]
+name = "kenali-core"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+zeroize.workspace = true
+secrecy.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+getrandom.workspace = true
+tracing.workspace = true
+ndarray.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

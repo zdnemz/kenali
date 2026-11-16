@@ -1,0 +1,19 @@
+[package]
+name = "kenali-vision"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kenali-core = { path = "../kenali-core" }
+ndarray.workspace = true
+ort.workspace = true
+fast_image_resize.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

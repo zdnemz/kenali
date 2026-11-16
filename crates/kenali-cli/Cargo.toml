@@ -1,0 +1,19 @@
+[package]
+name = "kenali-cli"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kenali"
+path = "src/main.rs"
+
+[dependencies]
+kenali-core = { path = "../kenali-core" }
+kenali-ipc = { path = "../kenali-ipc" }
+anyhow.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

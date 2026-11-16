@@ -1,0 +1,6 @@
+[alias]
+# `cargo xtask install` requires KENALI_ALLOW_INSTALL=1 (enforced by xtask).
+xtask = "run --package xtask --"
+
+[term]
+verbose = false

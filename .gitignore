@@ -1,0 +1,25 @@
+# Build artifacts
+/target
+**/target/
+
+# Orchestrator run state lives outside the tracked tree
+/.crew/
+
+# Debug symbols and crash dumps
+*.pdb
+*.dmp
+
+# Diagnostics archives exported by the service/UI
+*.diag.zip
+diagnostics*.zip
+
+# Models are hash-pinned in models/models.lock; weights are never committed
+*.onnx
+models/*.onnx
+
+# Face data, captures and any biometric material are never committed
+*.face
+*.facedata
+*.capture
+faces/
+captures/
