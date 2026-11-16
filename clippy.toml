@@ -1,0 +1,7 @@
+# Kenali Clippy configuration. Lints themselves are selected in CI via
+# `-D warnings -W clippy::pedantic` with a curated allow-list; this file only
+# tunes thresholds and records the minimum supported toolchain.
+msrv = "1.96.0"
+too-many-arguments-threshold = 8
+type-complexity-threshold = 400
+cognitive-complexity-threshold = 25

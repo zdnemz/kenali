@@ -1,0 +1,58 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/kenali-core",
+    "crates/kenali-ipc",
+    "crates/kenali-store",
+    "crates/kenali-vision",
+    "crates/kenali-winapi",
+    "crates/kenali-camera",
+    "crates/kenali-service",
+    "crates/kenali-cp",
+    "crates/kenali-ui",
+    "crates/kenali-cli",
+    "crates/kenali-bench",
+    "xtask",
+    "fuzz",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+rust-version = "1.96.0"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# Wave-1 dependency floor. Versions are permissive here and pinned in Cargo.lock.
+# VERIFY (context pack U8/U12): ort / eframe / egui versions below were resolved
+# against crates.io when the lockfile was generated; adjust here if a version
+# no longer resolves and record the replacement in this comment.
+serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
+chacha20poly1305 = "0.10"
+sha2 = "0.10"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+secrecy = "0.10"
+subtle = "2"
+getrandom = "0.3"
+ndarray = "0.16"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
+crossbeam-channel = "0.5"
+proptest = "1"
+criterion = "0.5"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Services",
+] }
+ort = { version = "=2.0.0-rc.13", features = ["load-dynamic"] }
+egui = "0.31"
+eframe = "0.31"
+fast_image_resize = "5"

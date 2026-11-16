@@ -1,0 +1,57 @@
+# Wave 1 — root configuration (owned by W1-01)
+Cargo.toml
+Cargo.lock
+rust-toolchain.toml
+clippy.toml
+deny.toml
+.cargo/config.toml
+.gitignore
+
+# Wave 1 — crate manifests and roots (owned by W1-01)
+crates/kenali-core/Cargo.toml
+crates/kenali-core/src/lib.rs
+crates/kenali-ipc/Cargo.toml
+crates/kenali-ipc/src/lib.rs
+crates/kenali-store/Cargo.toml
+crates/kenali-store/src/lib.rs
+crates/kenali-vision/Cargo.toml
+crates/kenali-vision/src/lib.rs
+crates/kenali-winapi/Cargo.toml
+crates/kenali-winapi/src/lib.rs
+crates/kenali-winapi/src/com.rs
+crates/kenali-camera/Cargo.toml
+crates/kenali-camera/src/lib.rs
+crates/kenali-service/Cargo.toml
+crates/kenali-service/src/lib.rs
+crates/kenali-service/src/main.rs
+crates/kenali-cp/Cargo.toml
+crates/kenali-cp/src/lib.rs
+crates/kenali-ui/Cargo.toml
+crates/kenali-ui/src/lib.rs
+crates/kenali-ui/src/main.rs
+crates/kenali-cli/Cargo.toml
+crates/kenali-cli/src/lib.rs
+crates/kenali-cli/src/main.rs
+crates/kenali-bench/Cargo.toml
+crates/kenali-bench/src/lib.rs
+crates/kenali-bench/src/main.rs
+xtask/Cargo.toml
+xtask/src/main.rs
+fuzz/Cargo.toml
+fuzz/src/lib.rs
+fuzz/fuzz_targets/fuzz_ipc_decode.rs
+fuzz/fuzz_targets/fuzz_frame_decode.rs
+
+# Wave 1 — companion docs (created by W1-02 / W1-03 / W1-04)
+docs/architecture.md
+docs/threat_model.md
+docs/roadmap.md
+docs/test_plan.md
+docs/dev_safety_runbook.md
+docs/references.md
+docs/reports/coverage.md
+
+# Wave 1 — CI gate scripts and manifest (owned by W1-01)
+tests/ci/integration_gate.sh
+tests/ci/goal_check.sh
+tests/ci/deliverables.txt

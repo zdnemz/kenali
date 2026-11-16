@@ -1,0 +1,14 @@
+[package]
+name = "kenali-camera"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+kenali-core = { path = "../kenali-core" }
+windows.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true

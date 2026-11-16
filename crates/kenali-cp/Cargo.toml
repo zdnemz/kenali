@@ -1,0 +1,21 @@
+[package]
+name = "kenali-cp"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# Cargo rejects hyphens in library target names, so the cdylib target is
+# `kenali_cp`; xtask emits the final `kenali-cp.dll` during packaging.
+name = "kenali_cp"
+crate-type = ["cdylib"]
+
+[dependencies]
+kenali-core = { path = "../kenali-core" }
+kenali-ipc = { path = "../kenali-ipc" }
+kenali-winapi = { path = "../kenali-winapi" }
+windows.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
