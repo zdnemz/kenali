@@ -7,7 +7,9 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+kenali-ipc = { path = "../kenali-ipc" }
 windows.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
+zeroize.workspace = true

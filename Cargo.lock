@@ -2199,6 +2199,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -2287,9 +2288,11 @@ name = "kenali-winapi"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "kenali-ipc",
  "thiserror 2.0.21",
  "tracing",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -5241,6 +5244,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "kenali-winapi",
 ]
 
 [[package]]

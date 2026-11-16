@@ -19,3 +19,4 @@ kenali-winapi = { path = "../kenali-winapi" }
 windows.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+zeroize.workspace = true
