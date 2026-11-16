@@ -9,3 +9,4 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+kenali-winapi = { path = "../crates/kenali-winapi" }
