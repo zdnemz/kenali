@@ -565,6 +565,20 @@ rg -q -F 'ExecWait' "$NSIS" \
 rg -q -F 'GetFullPathName' "$NSIS" \
   || { echo "FAIL NSIS script missing built-in GetFullPathName"; exit 1; }
 
+# NSIS 3 has no IfRegKeyExists instruction, and uninstall code may only Call
+# un.-prefixed functions. Guard the compile-time equivalents:
+# - key existence is probed via ReadRegStr + StrCmp;
+# - the join macro inlines StrCpy (no Call);
+# - the previous-version check is an un.-prefixed function.
+! rg -q 'IfRegKeyExists' "$NSIS" \
+  || { echo "FAIL NSIS script still uses non-existent IfRegKeyExists"; exit 1; }
+! rg -q 'Call[[:space:]]+KenaliJoin\b' "$NSIS" \
+  || { echo "FAIL NSIS script still Calls KenaliJoin"; exit 1; }
+rg -q 'Call[[:space:]]+un\.KenaliPreviousValid' "$NSIS" \
+  || { echo "FAIL NSIS uninstall does not Call un.KenaliPreviousValid"; exit 1; }
+! rg -q 'Call[[:space:]]+KenaliPreviousValid' "$NSIS" \
+  || { echo "FAIL NSIS script still Calls non-un-prefixed KenaliPreviousValid"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \

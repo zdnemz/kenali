@@ -83,29 +83,25 @@ Var PreviousDir
 ; Helpers
 ; ---------------------------------------------------------------------------
 
-; Join base and leaf into an absolute path. Uses dedicated global variables so
-; no stack manipulation is needed inside the function.
-Var JoinBase
-Var JoinLeaf
+; Join base and leaf into an absolute path. The concatenation is inlined in the
+; macro because the same macro is expanded in both installer and uninstaller
+; code, and NSIS forbids Call to a non-un.-prefixed function from uninstall
+; code. Only the built-in GetFullPathName instruction is used.
 Var JoinResult
 
 !macro KenaliJoinPath out base leaf
-  StrCpy $JoinBase "${base}"
-  StrCpy $JoinLeaf "${leaf}"
-  Call KenaliJoin
+  StrCpy $JoinResult "${base}\${leaf}"
+  GetFullPathName $JoinResult "$JoinResult"
   StrCpy "${out}" "$JoinResult"
 !macroend
-
-Function KenaliJoin
-  StrCpy $JoinResult "$JoinBase\$JoinLeaf"
-  GetFullPathName $JoinResult "$JoinResult"
-FunctionEnd
 
 ; Check whether a previous version directory contains valid binaries.
 ; Invalid / missing binaries -> "0", do not repoint registration at it.
 Var PrevValidDir
 Var PrevValidResult
-Function KenaliPreviousValid
+; un. prefix: only the uninstaller calls this, and NSIS requires un.-prefixed
+; functions for Call from uninstall code.
+Function un.KenaliPreviousValid
   StrCpy $PrevValidDir "$0"
   StrCpy $PrevValidResult "0"
   ${If} ${FileExists} "$PrevValidDir\kenali-cp.dll"
@@ -117,17 +113,26 @@ Function KenaliPreviousValid
   StrCpy $0 "$PrevValidResult"
 FunctionEnd
 
-; Create a HKLM key only when it does not exist and write Disabled=0 there.
-; If the key already exists, its Disabled value is left untouched: an owner
-; kill switch Disabled=1 must survive install and uninstall.
-Var EnsureKeyPath
-Function KenaliEnsureEnabledKey
-  StrCpy $EnsureKeyPath "$0"
-  IfRegKeyExists HKLM "$EnsureKeyPath" keyExists
-  WriteRegDWORD HKLM "$EnsureKeyPath" "Disabled" 0
-keyExists:
-  ; Fresh key not created -> never overwrite a possible owner Disabled=1.
-FunctionEnd
+; Write Disabled=0 under a key ONLY when it does not already exist. An existing
+; owner kill switch (Disabled=1) survives install and uninstall. Inlined as a
+; macro because it is used from both installer and uninstaller code, where NSIS
+; forbids Call to a function without the un. prefix.
+;
+; NSIS 3 has no key-existence instruction. The equivalent probe is reading the
+; key's values: a present Disabled (REG_DWORD or REG_SZ) or a non-empty default
+; value both prove the key already exists, so its owner kill switch is preserved
+; verbatim. Only a key with neither gets Disabled=0 (which also creates the
+; key). LogicLib emits relative jumps, so the macro can expand more than once
+; without duplicate labels.
+!macro KenaliEnsureEnabledKey path
+  ReadRegStr $0 HKLM "${path}" "Disabled"
+  ${If} $0 == ""
+    ReadRegStr $0 HKLM "${path}" ""
+    ${If} $0 == ""
+      WriteRegDWORD HKLM "${path}" "Disabled" 0
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 Function .onInit
   ; Read previous installation state BEFORE any write. $INSTDIR defaults to
@@ -206,14 +211,12 @@ Section "Kenali ${KENALI_VERSION}" SecInstall
   ; Provider key: write Disabled=0 ONLY when creating a NEW key. If an owner
   ; already set Disabled=1 as a kill switch, it is preserved verbatim.
   ; Check existence BEFORE writing the default value (which creates the key).
-  StrCpy $0 "${KENALI_CP_KEY}"
-  Call KenaliEnsureEnabledKey
+  !insertmacro KenaliEnsureEnabledKey "${KENALI_CP_KEY}"
   WriteRegStr HKLM "${KENALI_CP_KEY}" "" "${KENALI_CP_NAME}"
 
   ; Application key: same fresh-key-only rule for the global kill switch.
   ; Check BEFORE WriteRegStr InstallDir creates the key.
-  StrCpy $0 "${KENALI_REG_ROOT}"
-  Call KenaliEnsureEnabledKey
+  !insertmacro KenaliEnsureEnabledKey "${KENALI_REG_ROOT}"
   WriteRegStr HKLM "${KENALI_REG_ROOT}" "InstallDir" "$INSTDIR"
   ${If} $PreviousVersion != ""
     WriteRegStr HKLM "${KENALI_REG_ROOT}" "PreviousVersion" "$PreviousVersion"
@@ -277,23 +280,18 @@ Section "Uninstall"
     ; from an arbitrary registry string.
     !insertmacro KenaliJoinPath $PreviousDir "C:\Program Files\Kenali" "$PreviousVersion"
     StrCpy $0 "$PreviousDir"
-    Call KenaliPreviousValid
+    Call un.KenaliPreviousValid
     StrCpy $0 "$PrevValidResult"
     ${If} $0 == "1"
       ; R-E: repoint the CP and service at the previous version's binaries.
       WriteRegStr HKLM "${KENALI_CLSID_KEY}" "" "${KENALI_CP_NAME}"
       WriteRegStr HKLM "${KENALI_INPROC_KEY}" "" "$PreviousDir\kenali-cp.dll"
       WriteRegStr HKLM "${KENALI_INPROC_KEY}" "ThreadingModel" "Apartment"
-      ; Only set Disabled=0 when we had to create the provider key; any
-      ; owner-set Disabled=1 remains in place. Check BEFORE writing the
-      ; default value (which itself creates the key).
-      IfRegKeyExists HKLM "${KENALI_CP_KEY}" cpKeyStillExists
+      ; Only set Disabled=0 when the provider key did not exist; any owner-set
+      ; Disabled=1 remains in place. Check BEFORE writing the default value
+      ; (which itself creates the key).
+      !insertmacro KenaliEnsureEnabledKey "${KENALI_CP_KEY}"
       WriteRegStr HKLM "${KENALI_CP_KEY}" "" "${KENALI_CP_NAME}"
-      WriteRegDWORD HKLM "${KENALI_CP_KEY}" "Disabled" 0
-      Goto cpKeyDone
-cpKeyStillExists:
-      WriteRegStr HKLM "${KENALI_CP_KEY}" "" "${KENALI_CP_NAME}"
-cpKeyDone:
 
       WriteRegStr HKLM "${KENALI_REG_ROOT}" "InstallDir" "$PreviousDir"
       WriteRegStr HKLM "${KENALI_REG_ROOT}" "PreviousVersion" "$PreviousVersion"
