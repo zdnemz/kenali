@@ -529,7 +529,9 @@ rg -q -F '& $env:MAKENSIS' "$WF" \
 
 # NSIS Include directory guard: nsExec.nsh (and other bundled headers) live in
 # the Include directory next to makensis.exe. Derive it from MAKENSIS, fail
-# loudly when missing, and pass it to makensis via /I. Never edit the NSI script.
+# loudly when missing, and pass it to the NSI script as /DKENALI_NSIS_INCLUDE;
+# the script registers that directory with !addincludedir. Never edit the
+# NSI script's include behavior at the command line.
 rg -q -F '$nsisDir = Split-Path -Parent $env:MAKENSIS' "$WF" \
   || { echo "FAIL workflow NSIS include dir not derived from MAKENSIS"; exit 1; }
 rg -q -F '$includeDir = Join-Path $nsisDir' "$WF" \
@@ -538,8 +540,14 @@ rg -q -F "'Include'" "$WF" \
   || { echo "FAIL workflow NSIS include dir missing 'Include' literal"; exit 1; }
 rg -q -F 'Test-Path -LiteralPath $includeDir -PathType Container' "$WF" \
   || { echo "FAIL workflow NSIS include dir existence check missing"; exit 1; }
-rg -q -F '/I$includeDir' "$WF" \
-  || { echo "FAIL workflow makensis invocation missing /I$includeDir"; exit 1; }
+rg -q -F '/DKENALI_NSIS_INCLUDE=' "$WF" \
+  || { echo "FAIL workflow makensis invocation missing /DKENALI_NSIS_INCLUDE define"; exit 1; }
+! rg -q -F '/I$includeDir' "$WF" \
+  || { echo "FAIL workflow still uses invalid /I$includeDir makensis option"; exit 1; }
+rg -q -F '!addincludedir' "$NSIS" \
+  || { echo "FAIL NSIS script missing !addincludedir"; exit 1; }
+rg -q -F 'KENALI_NSIS_INCLUDE' "$NSIS" \
+  || { echo "FAIL NSIS script missing KENALI_NSIS_INCLUDE"; exit 1; }
 
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
