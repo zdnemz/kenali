@@ -1605,6 +1605,12 @@ dependencies = [
 [[package]]
 name = "fuzz"
 version = "0.1.0"
+dependencies = [
+ "kenali-core",
+ "kenali-ipc",
+ "kenali-vision",
+ "proptest",
+]
 
 [[package]]
 name = "generic-array"
@@ -5251,6 +5257,7 @@ dependencies = [
  "anyhow",
  "clap",
  "kenali-winapi",
+ "sha2",
 ]
 
 [[package]]

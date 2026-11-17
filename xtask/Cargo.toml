@@ -10,3 +10,4 @@ publish.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 kenali-winapi = { path = "../crates/kenali-winapi" }
+sha2.workspace = true
