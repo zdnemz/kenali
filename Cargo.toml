@@ -64,6 +64,9 @@ windows = { version = "0.62", features = [
     "Win32_System_EventLog",
     "Win32_Media_MediaFoundation",
     "Win32_System_IO",
+    # Wave 4 additive feature: FindWindowW/SetForegroundWindow and
+    # SetProcessDpiAwarenessContext/GetDpiForWindow.
+    "Win32_UI_WindowsAndMessaging",
 ] }
 ort = { version = "=2.0.0-rc.13", features = ["load-dynamic"] }
 egui = "0.31"
