@@ -98,7 +98,7 @@ Var JoinResult
 
 Function KenaliJoin
   StrCpy $JoinResult "$JoinBase\$JoinLeaf"
-  ${GetFullPath} $JoinResult "$JoinResult"
+  GetFullPathName $JoinResult "$JoinResult"
 FunctionEnd
 
 ; Check whether a previous version directory contains valid binaries.
@@ -134,14 +134,20 @@ Function .onInit
   ; this version; InstallDirRegKey may already have changed it, so always
   ; resolve the versioned target explicitly from the pinned prefix.
   StrCpy $INSTDIR "C:\Program Files\Kenali\${KENALI_VERSION}"
-  ${GetFullPath} $INSTDIR "$INSTDIR"
+  ; GetFullPathName clears its output when the path does not exist yet (the
+  ; install directory is created later), so keep the pinned value on error.
+  StrCpy $R9 "$INSTDIR"
+  ClearErrors
+  GetFullPathName $INSTDIR "$INSTDIR"
+  IfErrors 0 +2
+  StrCpy $INSTDIR "$R9"
 
   StrCpy $PreviousVersion ""
   StrCpy $PreviousDir ""
 
   ReadRegStr $0 HKLM "${KENALI_REG_ROOT}" "InstallDir"
   ${If} $0 != ""
-    ${GetFullPath} $1 "$0"
+    GetFullPathName $1 "$0"
     ${If} $1 == $INSTDIR
       MessageBox MB_ICONSTOP|MB_TOPMOST "Kenali ${KENALI_VERSION} is already installed at $\n$INSTDIR $\n$\nIn-place edits are never allowed. Uninstall that version (or use R-E rollback from docs/dev_safety_runbook.md) before installing again."
       Abort
@@ -257,13 +263,19 @@ Section "Uninstall"
   ; $INSTDIR is always this version's absolute directory; never read it from
   ; a writable registry string at uninstall time.
   StrCpy $INSTDIR "C:\Program Files\Kenali\${KENALI_VERSION}"
-  ${GetFullPath} $INSTDIR "$INSTDIR"
+  ; GetFullPathName clears its output when the path does not exist yet (the
+  ; install directory is created later), so keep the pinned value on error.
+  StrCpy $R9 "$INSTDIR"
+  ClearErrors
+  GetFullPathName $INSTDIR "$INSTDIR"
+  IfErrors 0 +2
+  StrCpy $INSTDIR "$R9"
 
   StrCpy $PreviousDir ""
   ${If} $PreviousVersion != ""
     ; The previous directory is derived from the pinned prefix + leaf; never
     ; from an arbitrary registry string.
-    ${KenaliJoinPath} $PreviousDir "C:\Program Files\Kenali" "$PreviousVersion"
+    !insertmacro KenaliJoinPath $PreviousDir "C:\Program Files\Kenali" "$PreviousVersion"
     StrCpy $0 "$PreviousDir"
     Call KenaliPreviousValid
     StrCpy $0 "$PrevValidResult"

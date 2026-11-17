@@ -557,6 +557,14 @@ rg -q -F 'KENALI_NSIS_INCLUDE' "$NSIS" \
 rg -q -F 'ExecWait' "$NSIS" \
   || { echo "FAIL NSIS script missing built-in ExecWait"; exit 1; }
 
+# Path canonicalization uses the NSIS 3 built-in instruction. ${GetFullPath} is
+# not a FileFunc/LogicLib macro in NSIS 3 (makensis aborts with
+# 'Invalid command: "${GetFullPath}"'), so it must not come back.
+! rg -q -F '${GetFullPath}' "$NSIS" \
+  || { echo "FAIL NSIS script still uses undefined macro \${GetFullPath}"; exit 1; }
+rg -q -F 'GetFullPathName' "$NSIS" \
+  || { echo "FAIL NSIS script missing built-in GetFullPathName"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \
