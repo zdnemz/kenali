@@ -72,3 +72,11 @@ ort = { version = "=2.0.0-rc.13", features = ["load-dynamic"] }
 egui = "0.31"
 eframe = "0.31"
 fast_image_resize = "5"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "unwind"
+debug = 2
+incremental = false
