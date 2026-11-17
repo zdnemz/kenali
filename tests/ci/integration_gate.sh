@@ -279,7 +279,7 @@ rg -q 'ThemeKind' crates/kenali-ui/src/theme.rs
 # preview frames RAM-only and zeroized; password field cleared after submit
 rg -q 'Zeroizing' crates/kenali-ui/src/preview.rs
 rg -q 'pub fn clear' crates/kenali-ui/src/preview.rs
-rg -q 'preview_pipe::PreviewPipeClient' crates/kenali-ui/src/preview.rs
+rg -q 'preview_pipe::PreviewPipeClient' crates/kenali-ui/src/pipe_worker.rs
 rg -q 'MAX_PREVIEW_BYTES' crates/kenali-winapi/src/preview_pipe.rs
 rg -q 'Password::from_wide' crates/kenali-ui/src/password_field.rs
 rg -q 'clear()' crates/kenali-ui/src/password_field.rs
