@@ -118,3 +118,24 @@ crates/kenali-ui/src/diagnostics.rs
 crates/kenali-ui/src/test_bench.rs
 tests/ui/walkthrough.md
 docs/reports/log_hygiene.md
+
+# Wave 5 — hardening + handoff (owned by W5-01..W5-07)
+xtask/src/check.rs
+xtask/src/build.rs
+xtask/src/models.rs
+xtask/src/sign.rs
+xtask/src/uninstall.rs
+xtask/src/rollback.rs
+xtask/src/fuzz.rs
+xtask/src/bench.rs
+xtask/src/package.rs
+xtask/src/sbom.rs
+fuzz/tests/hostile_inputs.rs
+.cargo/audit.toml
+docs/reports/far_frr.md
+docs/reports/pad.md
+docs/reports/soak.md
+docs/reports/recovery_drills.md
+tests/ci/soak_vm.ps1
+tests/ci/soak_secondary_account.ps1
+tests/ci/recovery_drills.ps1

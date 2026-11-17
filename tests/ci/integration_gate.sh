@@ -322,3 +322,101 @@ while IFS= read -r p; do
 done < tests/ci/deliverables.txt
 
 echo "WAVE 4 INTEGRATION GATE PASS"
+
+# --- Wave 5 seams (append to tests/ci/integration_gate.sh) ---
+set -euo pipefail
+
+# xtask command dispatch: full command set present; install-family guarded statically (NEVER executed here)
+for c in Check Build Models Sign Install Uninstall Rollback Fuzz Bench Package Sbom; do
+  rg -q "$c" xtask/src/main.rs || { echo "FAIL xtask subcommand missing: $c"; exit 1; }
+done
+for f in check build models sign install uninstall rollback fuzz bench package sbom; do
+  test -s "xtask/src/$f.rs" || { echo "FAIL xtask module: $f"; exit 1; }
+done
+for f in install uninstall rollback; do
+  rg -q 'KENALI_ALLOW_INSTALL' "xtask/src/$f.rs" || { echo "FAIL install guard: $f"; exit 1; }
+done
+rg -q 'Fetch' xtask/src/models.rs
+rg -q 'Verify' xtask/src/models.rs
+rg -q 'KENALI_SIGN_CERT' xtask/src/sign.rs
+rg -q -F 'target/sbom/' xtask/src/sbom.rs
+rg -q -F 'target/package/' xtask/src/package.rs
+rg -q 'ipc_decode' xtask/src/fuzz.rs
+rg -q 'frame_decode' xtask/src/fuzz.rs
+! rg -n 'unwrap\(|expect\(|panic!|todo!|unimplemented!' xtask/src
+
+# fuzz harnesses are real byte-slice entry points, host-testable and MSVC-checkable
+cargo test --locked -p fuzz
+cargo check --target x86_64-pc-windows-msvc --locked -p fuzz
+rg -q 'pub fn fuzz_ipc_decode' fuzz/src/lib.rs
+rg -q 'pub fn fuzz_frame_decode' fuzz/src/lib.rs
+rg -q 'decode_auth_request' fuzz/src/lib.rs
+rg -q 'decode_admin_request' fuzz/src/lib.rs
+rg -q 'decode_preview' fuzz/src/lib.rs
+rg -q 'Frame::new' fuzz/src/lib.rs
+rg -q 'to_nchw' fuzz/src/lib.rs
+test -s fuzz/tests/hostile_inputs.rs
+
+# release flags present in their pinned locations
+rg -q '^\[profile\.release\]' Cargo.toml
+rg -q 'lto = "fat"' Cargo.toml
+rg -q 'codegen-units = 1' Cargo.toml
+rg -q 'opt-level = 3' Cargo.toml
+rg -q 'panic = "unwind"' Cargo.toml
+rg -q -F 'target-feature=+crt-static' .cargo/config.toml
+rg -q -F 'control-flow-guard=yes' .cargo/config.toml
+rg -q -F 'link-arg=/CETCOMPAT' .cargo/config.toml
+rg -q '^\s*xtask = ' .cargo/config.toml
+
+# supply-chain gates that work on this host
+cargo deny check -A unmaintained
+cargo audit
+
+# owner-run reports and scripts exist (never executed here)
+for d in docs/reports/far_frr.md docs/reports/pad.md docs/reports/soak.md \
+         docs/reports/recovery_drills.md tests/ci/soak_vm.ps1 \
+         tests/ci/soak_secondary_account.ps1 tests/ci/recovery_drills.ps1; do
+  test -s "$d" || { echo "FAIL wave-5 report/script: $d"; exit 1; }
+done
+rg -q -e '2,237' -e '2237' docs/reports/far_frr.md
+rg -q '300' docs/reports/pad.md
+for d in R-A R-B R-C R-D R-E; do
+  rg -q -F "$d" tests/ci/recovery_drills.ps1 || { echo "FAIL drill: $d"; exit 1; }
+done
+! rg -qi 'executed (on|in) this host' docs/reports/far_frr.md docs/reports/pad.md \
+   docs/reports/soak.md docs/reports/recovery_drills.md
+
+# whole workspace MSVC type-check + all host suites (reaffirm waves 1-4; add fuzz)
+cargo check --target x86_64-pc-windows-msvc --locked --workspace
+cargo test --locked -p kenali-core -p kenali-ipc -p kenali-store -p kenali-vision -p kenali-bench -p fuzz
+
+# unsafe confined with SAFETY comments; fuzz/xtask stay forbid(unsafe_code)
+for c in kenali-winapi kenali-camera kenali-cp; do
+  ! rg -q 'forbid\(unsafe_code\)' crates/$c/src/lib.rs || { echo "FAIL forbid in $c"; exit 1; }
+done
+U=$( { rg -o --no-filename 'unsafe[[:space:]]*\{' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+S=$( { rg -o --no-filename '// SAFETY:' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+[ "$S" -ge "$U" ] || { echo "FAIL unsafe block without // SAFETY:"; exit 1; }
+rg -q '^#!\[forbid\(unsafe_code\)\]' fuzz/src/lib.rs
+rg -q '^#!\[forbid\(unsafe_code\)\]' xtask/src/main.rs
+
+# no unapproved placeholders (reaffirm waves 1-4 over the new xtask/fuzz files)
+! rg -n --glob '!**/tests/**' --glob '!*.md' --glob '!tests/ci/**' \
+   -e 'TODO' -e 'lorem' -e 'unimplemented!\(\)' crates xtask fuzz
+
+# coverage + deliverables updated for wave 5
+for id in FR-06 FR-07 FR-13 FR-15 NFR-03 NFR-05 NFR-06 NFR-07 SEC-05 SEC-08; do
+  rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
+    || { echo "FAIL wave-5 coverage row: $id"; exit 1; }
+done
+for id in NFR-08 NFR-09 SEC-11 SEC-13; do
+  rg -q "^\\| $id .*host-tested" docs/reports/coverage.md \
+    || { echo "FAIL wave-5 host coverage row: $id"; exit 1; }
+done
+while IFS= read -r p; do
+  [ -z "$p" ] && continue
+  case "$p" in \#*) continue ;; esac
+  test -s "$p" || { echo "FAIL missing/empty wave-5 deliverable: $p"; exit 1; }
+done < tests/ci/deliverables.txt
+
+echo "WAVE 5 INTEGRATION GATE PASS"
