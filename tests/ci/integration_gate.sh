@@ -549,6 +549,14 @@ rg -q -F '!addincludedir' "$NSIS" \
 rg -q -F 'KENALI_NSIS_INCLUDE' "$NSIS" \
   || { echo "FAIL NSIS script missing KENALI_NSIS_INCLUDE"; exit 1; }
 
+# nsExec dependency removed: NSIS core ExecWait replaces the nsExec plugin.
+! rg -q -F 'nsExec.nsh' "$NSIS" \
+  || { echo "FAIL NSIS script still includes nsExec.nsh"; exit 1; }
+! rg -q -F 'nsExec::' "$NSIS" \
+  || { echo "FAIL NSIS script still references nsExec::"; exit 1; }
+rg -q -F 'ExecWait' "$NSIS" \
+  || { echo "FAIL NSIS script missing built-in ExecWait"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \
