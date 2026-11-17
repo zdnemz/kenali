@@ -515,6 +515,18 @@ rg -q -F '& $env:SIGNTOOL' "$WF" \
 ! rg -q -F '& signtool.exe' "$WF" \
   || { echo "FAIL workflow still uses bare & signtool.exe"; exit 1; }
 
+# makensis location guard: after choco install, CI resolves makensis.exe from a
+# known absolute install path (or PATH) and never relies on a bare name that may
+# not be on the runner's PATH.
+rg -q -F 'Locate makensis' "$WF" \
+  || { echo "FAIL workflow missing makensis discovery step"; exit 1; }
+rg -q -F 'MAKENSIS' "$WF" \
+  || { echo "FAIL workflow missing MAKENSIS environment token"; exit 1; }
+rg -q -F '& $env:MAKENSIS' "$WF" \
+  || { echo "FAIL workflow installer invocation missing $env:MAKENSIS"; exit 1; }
+! rg -q -F '& makensis.exe' "$WF" \
+  || { echo "FAIL workflow still uses bare & makensis.exe"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \
