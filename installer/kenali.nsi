@@ -62,7 +62,6 @@ SetCompressor /SOLID lzma
 
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
-!include "nsExec.nsh"
 
 ; ---------------------------------------------------------------------------
 ; Registry keys (HKLM only; owner recovery state is preserved)
@@ -216,11 +215,11 @@ Section "Kenali ${KENALI_VERSION}" SecInstall
 
   ; Service registration via sc.exe, as pinned in the contract. The quoted
   ; ImagePath is REG_EXPAND_SZ and uses this version's absolute service binary.
-  nsExec::ExecToLog 'sc.exe create "${KENALI_SERVICE}" binPath= "\"$INSTDIR\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 error= 1'
+  ExecWait 'sc.exe create "${KENALI_SERVICE}" binPath= "\"$INSTDIR\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 error= 1'
   ; Re-assert all four values explicitly (config also covers re-registration
   ; after a previous service was removed by an owner).
-  nsExec::ExecToLog 'sc.exe config "${KENALI_SERVICE}" binPath= "\"$INSTDIR\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 errorControl= 1'
-  nsExec::ExecToLog 'sc.exe start "${KENALI_SERVICE}"'
+  ExecWait 'sc.exe config "${KENALI_SERVICE}" binPath= "\"$INSTDIR\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 errorControl= 1'
+  ExecWait 'sc.exe start "${KENALI_SERVICE}"'
 
   WriteRegStr HKLM "${KENALI_UNINSTALL_KEY}" "DisplayName" "Kenali ${KENALI_VERSION} (x86_64)"
   WriteRegStr HKLM "${KENALI_UNINSTALL_KEY}" "DisplayVersion" "${KENALI_VERSION}"
@@ -247,8 +246,8 @@ Section "Uninstall"
 
   ; Always unregister the current version first so we never leave the CP
   ; pointing at files we are about to remove.
-  nsExec::ExecToLog 'sc.exe stop "${KENALI_SERVICE}"'
-  nsExec::ExecToLog 'sc.exe delete "${KENALI_SERVICE}"'
+  ExecWait 'sc.exe stop "${KENALI_SERVICE}"'
+  ExecWait 'sc.exe delete "${KENALI_SERVICE}"'
 
   DeleteRegKey HKLM "${KENALI_CLSID_KEY}"
   DeleteRegKey HKLM "${KENALI_CP_KEY}"
@@ -287,9 +286,9 @@ cpKeyDone:
       WriteRegStr HKLM "${KENALI_REG_ROOT}" "InstallDir" "$PreviousDir"
       WriteRegStr HKLM "${KENALI_REG_ROOT}" "PreviousVersion" "$PreviousVersion"
 
-      nsExec::ExecToLog 'sc.exe create "${KENALI_SERVICE}" binPath= "\"$PreviousDir\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 error= 1'
-      nsExec::ExecToLog 'sc.exe config "${KENALI_SERVICE}" binPath= "\"$PreviousDir\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 errorControl= 1'
-      nsExec::ExecToLog 'sc.exe start "${KENALI_SERVICE}"'
+      ExecWait 'sc.exe create "${KENALI_SERVICE}" binPath= "\"$PreviousDir\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 error= 1'
+      ExecWait 'sc.exe config "${KENALI_SERVICE}" binPath= "\"$PreviousDir\kenali-svc.exe\"" DisplayName= "${KENALI_SERVICE_DISPLAY}" start= 2 type= 16 errorControl= 1'
+      ExecWait 'sc.exe start "${KENALI_SERVICE}"'
       MessageBox MB_ICONINFORMATION|MB_TOPMOST \
         "Kenali ${KENALI_VERSION} was uninstalled. The previous version ($PreviousVersion) was restored from $\n$PreviousDir $\n$\nIts directory was preserved. Owner kill-switch values were not changed."
     ${Else}
