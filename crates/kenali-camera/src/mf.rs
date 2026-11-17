@@ -351,7 +351,7 @@ fn read_rgb_frame(
     Frame::new(width, height, raw.to_vec())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 

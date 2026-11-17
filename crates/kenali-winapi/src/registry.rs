@@ -167,7 +167,7 @@ pub fn set_kill_switch(_enabled: bool) -> Result<(), RegistryError> {
 const ERROR_FILE_NOT_FOUND_SENTINEL: windows::Win32::Foundation::WIN32_ERROR =
     windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 

@@ -86,7 +86,7 @@ impl FrameSource for FileSource {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 
