@@ -126,3 +126,92 @@ S=$( { rg -o --no-filename '// SAFETY:' crates/kenali-winapi/src crates/kenali-c
    -e 'TODO' -e 'lorem' -e 'unimplemented!\(\)' crates xtask fuzz
 
 echo "WAVE 2 INTEGRATION GATE PASS"
+
+# --- Wave 3 seams (append to tests/ci/integration_gate.sh) ---
+set -euo pipefail
+
+# service ↔ winapi ↔ ipc ↔ store ↔ vision ↔ camera names match across crate boundaries
+rg -q 'kenali-winapi'  crates/kenali-service/Cargo.toml
+rg -q 'kenali-ipc'     crates/kenali-service/Cargo.toml
+rg -q 'kenali-store'   crates/kenali-service/Cargo.toml
+rg -q 'kenali-vision'  crates/kenali-service/Cargo.toml
+rg -q 'kenali-camera'  crates/kenali-service/Cargo.toml
+rg -q 'kenali-store'   crates/kenali-winapi/Cargo.toml
+rg -q 'KeyHierarchy for TpmKeyHierarchy' crates/kenali-winapi/src/tpm.rs
+rg -q 'impl FrameSource for MfSource'      crates/kenali-camera/src/mf.rs
+rg -q 'impl FrameSource for FileSource'    crates/kenali-camera/src/replay.rs
+rg -q 'impl FrameSource for SyntheticSource' crates/kenali-camera/src/synthetic.rs
+rg -q 'impl Detector for OrtDetector'      crates/kenali-vision/src/onnx.rs
+rg -q 'impl Embedder for OrtEmbedder'      crates/kenali-vision/src/onnx.rs
+rg -q 'pub struct VisionPipeline'          crates/kenali-service/src/pipeline.rs
+rg -q 'create_server_pipe'                 crates/kenali-service/src/pipe_loop.rs
+rg -q 'AttemptStateMachine'                crates/kenali-service/src/auth_attempt.rs
+rg -q 'PolicyEngine'                       crates/kenali-service/src/auth_attempt.rs
+rg -q 'pub const PROTO_VERSION'            crates/kenali-ipc/src/lib.rs
+rg -q 'PROTO_VERSION'                      crates/kenali-service/src/pipe_loop.rs
+
+# every pipe path / SDDL is consistent with the client and the docs
+rg -q -F '\\\\.\\pipe\\kenali.auth'    crates/kenali-winapi/src/pipes.rs
+rg -q -F '\\\\.\\pipe\\kenali.admin'   crates/kenali-winapi/src/pipe_server.rs
+rg -q -F '\\\\.\\pipe\\kenali.preview' crates/kenali-winapi/src/pipe_server.rs
+rg -q -F 'D:P(A;;GA;;;SY)'             crates/kenali-winapi/src/pipes.rs
+rg -q -F 'D:P(A;;GA;;;SY)(A;;GA;;;BA)' crates/kenali-winapi/src/pipe_server.rs
+rg -q 'FIRST_PIPE_INSTANCE'            crates/kenali-winapi/src/pipe_server.rs
+rg -q 'pub fn verify_peer_pid'         crates/kenali-winapi/src/pipe_server.rs
+rg -q 'AUTH_ATTEMPT_TIMEOUT'           crates/kenali-winapi/src/pipes.rs
+rg -q '≤ 3 s|3 s' docs/spikes/P0-S3.md
+
+# every pipe/server entry is bounded and panic-safe (no unwrap/panic in hot paths)
+! rg -n 'unwrap\(|expect\(|panic!|todo!|unimplemented!' \
+   crates/kenali-service/src crates/kenali-winapi/src/pipe_server.rs
+rg -q 'deadline' crates/kenali-winapi/src/pipe_server.rs
+rg -q 'ConnectNamedPipe' crates/kenali-winapi/src/pipe_server.rs
+rg -q 'log_warning' crates/kenali-service/src/logging.rs
+rg -q 'take_pad_warning' crates/kenali-service/src/auth_attempt.rs
+
+# unsafe confined to the three FFI crates, with SAFETY on every block (incl. camera + pipes server)
+for c in kenali-winapi kenali-camera kenali-cp; do
+  ! rg -q 'forbid\(unsafe_code\)' crates/$c/src/lib.rs || { echo "FAIL forbid in $c"; exit 1; }
+done
+U=$( { rg -o --no-filename 'unsafe[[:space:]]*\{' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+S=$( { rg -o --no-filename '// SAFETY:' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+[ "$S" -ge "$U" ] || { echo "FAIL unsafe block without // SAFETY:"; exit 1; }
+
+# model lock verified, no weights committed
+test -s models/models.lock
+for m in yunet.onnx sface.onnx minifasnet_v2.onnx minifasnet_v1se.onnx; do
+  rg -q -F "$m" models/models.lock || { echo "FAIL model not pinned: $m"; exit 1; }
+done
+! find . -name '*.onnx' -not -path './target/*' | grep -q .
+rg -q 'verify_model_hash' crates/kenali-vision/src/onnx.rs
+rg -q '\*\.onnx' .gitignore
+
+# whole workspace MSVC type-check + all host suites (reaffirm waves 1-2 steps 3-4)
+cargo check --target x86_64-pc-windows-msvc --locked --workspace
+cargo test --locked -p kenali-core -p kenali-ipc -p kenali-store -p kenali-vision -p kenali-bench
+
+# Win32-only test modules are target-gated; these crates type-check for MSVC only.
+# Host cargo test of winapi/cp/camera is impossible on Linux: windows-future 0.3.2 is a
+# non-optional dep of windows 0.62.2 and references windows_core::imp unconditionally.
+! rg -n '^[[:space:]]*#\[cfg\(test\)\]' crates/kenali-winapi/src crates/kenali-cp/src crates/kenali-camera/src
+
+# no unapproved placeholders (reaffirm waves 1-2 step 6 over the new files)
+! rg -n --glob '!**/tests/**' --glob '!*.md' --glob '!tests/ci/**' \
+   -e 'TODO' -e 'lorem' -e 'unimplemented!\(\)' crates xtask fuzz
+
+# coverage + deliverables updated for wave 3
+for id in FR-08 FR-12 SEC-01 SEC-14 SEC-16 NFR-01 NFR-02 NFR-04; do
+  rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
+    || { echo "FAIL wave-3 coverage row: $id"; exit 1; }
+done
+for d in docs/spikes/P0-S2.md docs/spikes/P0-S3.md docs/spikes/P0-S4.md \
+         docs/spikes/P0-S5.md docs/spikes/P0-S10.md docs/spikes/P0-S11.md; do
+  test -s "$d" || { echo "FAIL wave-3 spike doc: $d"; exit 1; }
+done
+while IFS= read -r p; do
+  [ -z "$p" ] && continue
+  case "$p" in \#*) continue ;; esac
+  test -s "$p" || { echo "FAIL missing/empty wave-3 deliverable: $p"; exit 1; }
+done < tests/ci/deliverables.txt
+
+echo "WAVE 3 INTEGRATION GATE PASS"
