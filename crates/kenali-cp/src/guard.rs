@@ -28,7 +28,7 @@ pub fn guard<T>(what: &'static str, f: impl FnOnce() -> Result<T>) -> Result<T> 
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 

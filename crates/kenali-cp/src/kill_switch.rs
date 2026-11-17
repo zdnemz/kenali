@@ -24,7 +24,7 @@ pub fn kill_switch_enabled() -> bool {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 

@@ -46,7 +46,7 @@ pub fn current_session_is_allowed() -> bool {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 

@@ -57,7 +57,7 @@ pub fn decline_unsupported(raw: i32) -> windows::core::Result<()> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
 
