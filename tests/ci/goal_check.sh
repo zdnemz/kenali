@@ -45,4 +45,39 @@ for id in FR-02 FR-03 FR-10 FR-16 SEC-03 SEC-06 SEC-17; do
     || { echo "FAIL wave-2 coverage row not updated: $id"; exit 1; }
 done
 
-echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 static coverage and gates; runtime/hardware proof is manual per BRIEF.md)"
+# --- Wave 3 additions to the goal-check proxy (append to tests/ci/goal_check.sh) ---
+
+# wave-3 deliverables must exist on main, not just be planned
+for p in \
+  crates/kenali-winapi/src/pipe_server.rs \
+  crates/kenali-winapi/src/tpm.rs \
+  crates/kenali-winapi/src/eventlog.rs \
+  crates/kenali-winapi/src/service_host.rs \
+  crates/kenali-camera/src/mf.rs \
+  crates/kenali-camera/src/replay.rs \
+  crates/kenali-camera/src/synthetic.rs \
+  crates/kenali-camera/src/pin.rs \
+  crates/kenali-vision/src/onnx.rs \
+  crates/kenali-service/src/pipe_loop.rs \
+  crates/kenali-service/src/auth_attempt.rs \
+  crates/kenali-service/src/template_store.rs \
+  crates/kenali-service/src/pipeline.rs \
+  crates/kenali-bench/src/latency.rs \
+  crates/kenali-bench/src/calibration.rs \
+  models/models.lock \
+  docs/spikes/P0-S2.md \
+  docs/spikes/P0-S3.md \
+  docs/spikes/P0-S4.md \
+  docs/spikes/P0-S5.md \
+  docs/spikes/P0-S10.md \
+  docs/spikes/P0-S11.md; do
+  test -s "$p" || { echo "FAIL missing wave-3 deliverable: $p"; exit 1; }
+done
+
+# wave-3 coverage rows updated to the pinned status token
+for id in FR-08 FR-12 SEC-01 SEC-14 SEC-16 NFR-01 NFR-02 NFR-04; do
+  rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
+    || { echo "FAIL wave-3 coverage row not updated: $id"; exit 1; }
+done
+
+echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 + Wave 3 static coverage and gates; runtime/hardware proof is manual per BRIEF.md)"
