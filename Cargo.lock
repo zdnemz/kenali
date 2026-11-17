@@ -2171,6 +2171,7 @@ dependencies = [
  "clap",
  "kenali-core",
  "kenali-ipc",
+ "kenali-winapi",
  "thiserror 2.0.21",
  "tracing",
 ]
