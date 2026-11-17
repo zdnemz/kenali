@@ -1,5 +1,7 @@
-//! Read-only kill-switch check. The credential provider reads this value at
-//! session creation; no code in this crate ever writes the registry.
+//! Kill-switch registry access. The credential provider reads the value at
+//! session creation; the service is the sole writer, via [`set_kill_switch`],
+//! when an elevated admin sends a typed `SetEnabled(bool)` command. No other
+//! registry key is used.
 
 use thiserror::Error;
 
@@ -18,6 +20,8 @@ pub enum RegistryError {
     ReadFailed,
     #[error("unexpected registry value type")]
     InvalidType,
+    #[error("registry write failed")]
+    WriteFailed,
 }
 
 /// Return `true` when `HKLM\SOFTWARE\Kenali\Disabled` is the DWORD `1`.
@@ -89,6 +93,73 @@ pub fn kill_switch_enabled() -> Result<bool, RegistryError> {
         return Err(RegistryError::InvalidType);
     }
     Ok(value == 1)
+}
+
+/// Write the disable switch under [`KENALI_REGISTRY_PATH`] as a `REG_DWORD`.
+///
+/// This is the only registry write in the crate. It is invoked by the service
+/// on a typed admin `SetEnabled(bool)` command; no other key is touched.
+#[cfg(windows)]
+pub fn set_kill_switch(enabled: bool) -> Result<(), RegistryError> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE, KEY_SET_VALUE,
+        REG_DWORD, REG_OPTION_NON_VOLATILE,
+    };
+
+    let subkey: Vec<u16> = "SOFTWARE\\Kenali"
+        .encode_utf16()
+        .chain(core::iter::once(0))
+        .collect();
+    let value_name: Vec<u16> = KENALI_DISABLED_VALUE
+        .encode_utf16()
+        .chain(core::iter::once(0))
+        .collect();
+    // SAFETY: both Vecs are NUL-terminated above and alive for the whole
+    // function, so the PCWSTRs are valid for every call below.
+    let subkey = PCWSTR(subkey.as_ptr());
+    // SAFETY: see above — `value_name` outlives this binding's use.
+    let value_name = PCWSTR(value_name.as_ptr());
+
+    let mut key = HKEY(core::ptr::null_mut());
+    // SAFETY: `subkey` is NUL-terminated, `key` is a valid out-pointer, and
+    // KEY_SET_VALUE | REG_OPTION_NON_VOLATILE are plain option flags. The
+    // null class string is accepted for RegCreateKeyExW.
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_LOCAL_MACHINE,
+            subkey,
+            None,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return Err(RegistryError::Unavailable);
+    }
+
+    let data = (enabled as u32).to_le_bytes();
+    // SAFETY: `key` is valid, `value_name` is NUL-terminated and `data` is a
+    // live 4-byte slice matching REG_DWORD.
+    let status = unsafe { RegSetValueExW(key, value_name, None, REG_DWORD, Some(&data)) };
+    // SAFETY: `key` is owned here and still open.
+    let _ = unsafe { RegCloseKey(key) };
+
+    if status != ERROR_SUCCESS {
+        return Err(RegistryError::WriteFailed);
+    }
+    Ok(())
+}
+
+/// Host stub: no registry writes off Windows.
+#[cfg(not(windows))]
+pub fn set_kill_switch(_enabled: bool) -> Result<(), RegistryError> {
+    Ok(())
 }
 
 /// `ERROR_FILE_NOT_FOUND`, imported lazily to keep the hot path readable.
