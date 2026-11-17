@@ -7,7 +7,7 @@
 | ID | Requirement (short) | Wave | Status | File / test reference |
 |---|---|---|---|---|
 | FR-01 | Elevated UI enrolment wizard: 12+ quality-gated templates, 2+ lighting conditions, password validated before sealing | 4 | planned | `crates/kenali-ui/src/enrol.rs`; `crates/kenali-ipc/src/admin.rs` (BeginEnrolment/EnrolPassword); `tests/ui/enrol_walkthrough.md` (owner-run) |
-| FR-02 | Hands-free lock-screen unlock for enrolled SID only (CPUS_UNLOCK_WORKSTATION) | 2, 3 | type-checked + owner VM | `crates/kenali-cp/src/lib.rs`; `crates/kenali-cp/src/provider.rs`; `crates/kenali-cp/src/credential.rs`; `crates/kenali-cp/src/guard.rs`; `tests/ci/soak_vm.ps1` (owner-run, VM only) |
+| FR-02 | Hands-free lock-screen unlock for enrolled SID only (CPUS_UNLOCK_WORKSTATION) | 2, 3 | type-checked + owner VM | `crates/kenali-cp/src/lib.rs`; `crates/kenali-cp/src/provider.rs`; `crates/kenali-cp/src/credential.rs`; `crates/kenali-cp/src/guard.rs`; `docs/spikes/P0-S1.md` (VM spike notes); `tests/ci/soak_vm.ps1` (owner-run, VM only) |
 | FR-03 | Always-available password/PIN fallback; service kill shows unavailable tile within 300 ms | 2, 3 | type-checked + owner VM | `crates/kenali-cp/src/credential.rs`; `crates/kenali-cp/src/provider.rs`; `crates/kenali-cp/src/kill_switch.rs`; `docs/dev_safety_runbook.md` drill R-A (owner-run) |
 | FR-04 | Policy engine in the service, each rule unit + integration tested | 1, 3 | host-tested | `crates/kenali-core/src/policy.rs`; `crates/kenali-core/tests/policy.rs` (unit + property) |
 | FR-05 | Per-scenario scope switches (unlock on, logon off), editable in UI Settings | 1, 4 | in progress | `crates/kenali-core/src/config.rs` (schema); `crates/kenali-ui/src/settings.rs` (wave 4) |
