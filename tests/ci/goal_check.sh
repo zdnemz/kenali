@@ -114,4 +114,41 @@ for id in FR-01 FR-05 FR-09 FR-14 FR-17 FR-18 FR-20 NFR-10 SEC-04; do
     || { echo "FAIL wave-4 coverage row not updated: $id"; exit 1; }
 done
 
-echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 + Wave 3 + Wave 4 static coverage and gates; runtime/hardware/UAC proof is manual per BRIEF.md)"
+# --- Wave 5 additions to the goal-check proxy (append to tests/ci/goal_check.sh) ---
+
+# wave-5 deliverables must exist on main, not just be planned
+for p in \
+  xtask/src/check.rs \
+  xtask/src/build.rs \
+  xtask/src/models.rs \
+  xtask/src/sign.rs \
+  xtask/src/uninstall.rs \
+  xtask/src/rollback.rs \
+  xtask/src/fuzz.rs \
+  xtask/src/bench.rs \
+  xtask/src/package.rs \
+  xtask/src/sbom.rs \
+  fuzz/tests/hostile_inputs.rs \
+  .cargo/audit.toml \
+  docs/reports/far_frr.md \
+  docs/reports/pad.md \
+  docs/reports/soak.md \
+  docs/reports/recovery_drills.md \
+  tests/ci/soak_vm.ps1 \
+  tests/ci/soak_secondary_account.ps1 \
+  tests/ci/recovery_drills.ps1; do
+  test -s "$p" || { echo "FAIL missing wave-5 deliverable: $p"; exit 1; }
+done
+
+# wave-5 coverage rows updated to the pinned status tokens; deliverables asserted below
+# wave-5 coverage rows must be updated to the pinned status tokens
+for id in FR-06 FR-07 FR-13 FR-15 NFR-03 NFR-05 NFR-06 NFR-07 SEC-05 SEC-08; do
+  rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
+    || { echo "FAIL wave-5 coverage row not updated: $id"; exit 1; }
+done
+for id in NFR-08 NFR-09 SEC-11 SEC-13; do
+  rg -q "^\\| $id .*host-tested" docs/reports/coverage.md \
+    || { echo "FAIL wave-5 host coverage row not updated: $id"; exit 1; }
+done
+
+echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 + Wave 3 + Wave 4 + Wave 5 static coverage and gates; runtime/hardware/UAC/VM/signing proof is manual per BRIEF.md)"
