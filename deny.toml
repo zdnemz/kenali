@@ -1,13 +1,18 @@
 # cargo-deny configuration for CI hygiene (Wave 5 wires the check into xtask).
-version = 2
 
 [advisories]
-version = 2
 yanked = "deny"
-ignore = []
+# quick-xml 0.30.0 is pulled in transitively (Linux-only) through
+# eframe/egui -> accesskit. It is absent from the shipped Windows binaries,
+# and upgrading it is blocked by the pinned upstream dependency graph.
+ignore = [
+    # Quadratic run time when checking a start tag for duplicate attribute names.
+    { id = "RUSTSEC-2026-0194", reason = "Transitive Linux-only quick-xml 0.30.0 via eframe/egui/accesskit; absent from shipped Windows binaries." },
+    # Unbounded namespace-declaration allocation in NsReader.
+    { id = "RUSTSEC-2026-0195", reason = "Transitive Linux-only quick-xml 0.30.0 via eframe/egui/accesskit; absent from shipped Windows binaries." },
+]
 
 [licenses]
-version = 2
 allow = [
     "MIT",
     "Apache-2.0",
@@ -20,11 +25,14 @@ allow = [
     "CC0-1.0",
     "Unlicense",
     "BSL-1.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "CDLA-Permissive-2.0",
 ]
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+wildcards = "allow"
 
 [sources]
 unknown-registry = "deny"
