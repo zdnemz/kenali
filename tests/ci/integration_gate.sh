@@ -341,6 +341,15 @@ rg -q 'Verify' xtask/src/models.rs
 rg -q 'KENALI_SIGN_CERT' xtask/src/sign.rs
 rg -q -F 'target/sbom/' xtask/src/sbom.rs
 rg -q -F 'target/package/' xtask/src/package.rs
+# pinned staging set: no cross-extension invented names (CI failure mode)
+for pin in 'kenali-svc.exe' 'kenali-cp.dll' 'kenali-ui.exe' 'kenali.exe'; do
+  rg -q -F -- "$pin" xtask/src/package.rs || { echo "FAIL package pin: $pin"; exit 1; }
+done
+! rg -q 'trim_end_matches\("\.exe"\).*trim_end_matches\("\.dll"\)' xtask/src/package.rs \
+  || { echo "FAIL invented cross-extension package name"; exit 1; }
+rg -q -F -- '*.pfx' .gitignore
+rg -q -F -- '*.pfx.b64' .gitignore
+rg -q -F -- '*.p12' .gitignore
 rg -q 'ipc_decode' xtask/src/fuzz.rs
 rg -q 'frame_decode' xtask/src/fuzz.rs
 ! rg -n 'unwrap\(|expect\(|panic!|todo!|unimplemented!' xtask/src
