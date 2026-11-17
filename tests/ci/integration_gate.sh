@@ -579,6 +579,37 @@ rg -q 'Call[[:space:]]+un\.KenaliPreviousValid' "$NSIS" \
 ! rg -q 'Call[[:space:]]+KenaliPreviousValid' "$NSIS" \
   || { echo "FAIL NSIS script still Calls non-un-prefixed KenaliPreviousValid"; exit 1; }
 
+# Installer output location: makensis chdirs to the .nsi directory before
+# resolving OutFile, so the setup exe lands in installer/, not the workspace
+# root (run 44155172348 compiled fine, then failed "Installer not found").
+# CI must resolve that absolute path once and reuse it for signing, checksums
+# and upload; the repo-root relative check must not come back.
+rg -q -F "installerDir = Join-Path \$env:GITHUB_WORKSPACE 'installer'" "$WF" \
+  || { echo "FAIL workflow installer output dir not joined to 'installer'"; exit 1; }
+rg -q -F 'installerPath = Join-Path $installerDir $output' "$WF" \
+  || { echo "FAIL workflow installer path not derived from installer dir"; exit 1; }
+rg -q -F 'Test-Path -LiteralPath $installerPath -PathType Leaf' "$WF" \
+  || { echo "FAIL workflow installer existence check not on absolute path"; exit 1; }
+rg -q -F 'INSTALLER=$installerPath' "$WF" \
+  || { echo "FAIL workflow INSTALLER env var is not the absolute path"; exit 1; }
+rg -q -F '$env:INSTALLER' "$WF" \
+  || { echo "FAIL workflow downstream steps do not consume \$env:INSTALLER"; exit 1; }
+! rg -q -F 'Test-Path -LiteralPath $output -PathType Leaf' "$WF" \
+  || { echo "FAIL workflow still checks the installer in the repo root"; exit 1; }
+! rg -q -F 'INSTALLER=$output' "$WF" \
+  || { echo "FAIL workflow still exports the repo-root relative INSTALLER"; exit 1; }
+! rg -q -F '/NOCD' "$WF" \
+  || { echo "FAIL workflow passes /NOCD; local and CI must agree on installer/"; exit 1; }
+
+# local validator resolves the same installer/ output and cleans it up
+VALIDATOR=scripts/validate-pre-push.sh
+rg -q -F 'installer/kenali-$version-x86_64-pc-windows-msvc-setup.exe' "$VALIDATOR" \
+  || { echo "FAIL validator does not resolve installer/ as the output dir"; exit 1; }
+rg -q -F 'rm -f "$installer"' "$VALIDATOR" \
+  || { echo "FAIL validator does not clean up the compiled installer"; exit 1; }
+! rg -q -F '/NOCD' "$VALIDATOR" \
+  || { echo "FAIL validator passes /NOCD; local and CI must agree on installer/"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \

@@ -193,6 +193,7 @@ nsis_check() {
 
   stage=$(mktemp -d "${TMPDIR:-/tmp}/kenali-nsis-stage.XXXXXX") || return 1
   log="$stage/makensis.log"
+  installer="$REPO_ROOT/installer/kenali-$version-x86_64-pc-windows-msvc-setup.exe"
 
   # Dummy staged release files so the absolute File instructions resolve.
   for value in kenali-svc.exe kenali-cp.dll kenali-ui.exe kenali.exe; do
@@ -200,8 +201,12 @@ nsis_check() {
   done
   printf '<bom/>\n' > "$stage/kenali-$version.cdx.xml"
 
+  # makensis chdirs to the .nsi directory, so OutFile lands in installer/ even
+  # when invoked from the repo root (same as CI). Drop any stale artifact first
+  # so an earlier run cannot make this check pass.
+  rm -f "$installer"
   rc=0
-  ( cd "$stage" && exec env "${nsis_env[@]}" "$NSIS_BIN" -NOCD \
+  ( cd "$REPO_ROOT" && exec env "${nsis_env[@]}" "$NSIS_BIN" \
       "-DKENALI_NSIS_INCLUDE=$NSIS_DIR/Include" \
       "-DKENALI_VERSION=$version" \
       "-DKENALI_CLSID=$clsid" \
@@ -210,18 +215,18 @@ nsis_check() {
       "-DKENALI_CP_DLL=$stage/kenali-cp.dll" \
       "-DKENALI_UI_EXE=$stage/kenali-ui.exe" \
       "-DKENALI_CLI_EXE=$stage/kenali.exe" \
-      "$REPO_ROOT/installer/kenali.nsi" ) >"$log" 2>&1 || rc=$?
+      "installer/kenali.nsi" ) >"$log" 2>&1 || rc=$?
 
-  if [ "$rc" -eq 0 ] \
-     && [ -s "$stage/kenali-$version-x86_64-pc-windows-msvc-setup.exe" ]; then
-    printf '      compiled installer/kenali.nsi -> kenali-%s-%s-setup.exe\n' \
-      "$version" x86_64-pc-windows-msvc
+  if [ "$rc" -eq 0 ] && [ -s "$installer" ]; then
+    printf '      compiled installer/kenali.nsi -> %s\n' "$installer"
+    rm -f "$installer"
     rm -rf "$stage"
     return 0
   fi
 
   printf '      makensis failed (exit %s); last 40 lines:\n' "$rc"
   tail -n 40 "$log" | sed 's/^/        /'
+  rm -f "$installer"
   rm -rf "$stage"
   return 1
 }
