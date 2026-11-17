@@ -39,7 +39,7 @@ for p in \
   test -s "$p" || { echo "FAIL missing wave-2 deliverable: $p"; exit 1; }
 done
 
-# wave-2 coverage rows must be updated to the pinned status token
+# wave-2 coverage rows updated to the pinned status token
 for id in FR-02 FR-03 FR-10 FR-16 SEC-03 SEC-06 SEC-17; do
   rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
     || { echo "FAIL wave-2 coverage row not updated: $id"; exit 1; }
