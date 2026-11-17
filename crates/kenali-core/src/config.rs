@@ -168,7 +168,10 @@ fn within_schema(key: ConfigKey, value: ConfigValue) -> bool {
 /// Validate and apply a batch of proposed changes.
 ///
 /// Returns a new report; the caller's `current` is never mutated. Any single
-/// invalid or loosening change rejects the whole batch.
+/// invalid or loosening change rejects the whole batch. Each change is checked
+/// against the state produced by earlier changes in the batch, so a repeated
+/// key may tighten a value further but can never loosen it. This matches the
+/// PRD rule that the UI can only tighten the default policy.
 pub fn validate_config(
     current: &ConfigReport,
     changes: &[(ConfigKey, ConfigValue)],
@@ -180,7 +183,9 @@ pub fn validate_config(
             .find(|(k, _)| *k == key)
             .map(|(_, v)| *v)
             .ok_or(ConfigError::UnknownKey)?;
-        let old = current.get(key).unwrap_or(default);
+        // Compare against the accumulated state, not the original `current`:
+        // a later duplicate key must not be able to undo an earlier tightening.
+        let old = next.get(key).unwrap_or(default);
         if !same_shape(old, value) {
             return Err(ConfigError::TypeMismatch);
         }
@@ -248,14 +253,51 @@ mod tests {
             let base = ConfigReport::default_policy();
             let changes: Vec<_> = keys.into_iter().zip(values).collect();
             if let Ok(next) = validate_config(&base, &changes) {
-                for (key, new) in changes {
+                // Every accepted change is validated against the state produced
+                // by earlier changes in the batch, so a repeated key can only
+                // tighten further. The final value must therefore be at least
+                // as strict as the last (tightest) value proposed for that key,
+                // and no accepted value may loosen the original default.
+                for (key, proposed) in changes {
                     let old = base.get(key).expect("present");
                     let actual = next.get(key).expect("present");
-                    prop_assert_eq!(actual, new);
                     prop_assert!(is_tighter_or_equal(key, old, actual));
+                    prop_assert!(is_tighter_or_equal(key, proposed, actual));
                 }
             }
         }
+    }
+
+    #[test]
+    fn batch_rejects_duplicate_key_that_loosens_earlier_tightening() {
+        let base = ConfigReport::default_policy();
+        assert_eq!(
+            validate_config(
+                &base,
+                &[
+                    (ConfigKey::ScopeUnlock, ConfigValue::Bool(false)),
+                    (ConfigKey::ScopeUnlock, ConfigValue::Bool(true)),
+                ],
+            ),
+            Err(ConfigError::WouldLoosen)
+        );
+    }
+
+    #[test]
+    fn batch_accepts_duplicate_key_that_tightens_further() {
+        let base = ConfigReport::default_policy();
+        let next = validate_config(
+            &base,
+            &[
+                (ConfigKey::YawMaxDegrees, ConfigValue::F32(15.0)),
+                (ConfigKey::YawMaxDegrees, ConfigValue::F32(10.0)),
+            ],
+        )
+        .expect("monotone tightening accepted");
+        assert_eq!(
+            next.get(ConfigKey::YawMaxDegrees),
+            Some(ConfigValue::F32(10.0))
+        );
     }
 
     #[test]
