@@ -12,13 +12,46 @@ use kenali_core::score::cosine;
 use kenali_core::secret::Embedding;
 use kenali_core::types::DenyReason;
 use kenali_vision::decision::{Decision, TemporalWindow};
-use kenali_vision::traits::{Aligner, Detector, Embedder, PadClassifier};
+use kenali_vision::traits::{Aligner, Detection, Detector, Embedder, PadClassifier};
 use kenali_vision::VisionError;
 
 /// Consecutive qualifying frames required before the window accepts.
 const DEFAULT_REQUIRED_FRAMES: usize = 3;
 /// Bounded number of recent outcomes retained by the window.
 const DEFAULT_WINDOW_CAPACITY: usize = 8;
+
+/// Conservative default fraction of the primary face's bbox dimensions that a
+/// second face must reach on *both* axes before it counts as a comparable face
+/// (FR-13). Smaller background faces are ignored. Public so host tests can
+/// exercise the threshold exactly.
+pub const MULTI_FACE_MIN_RATIO: f32 = 0.5;
+
+/// A second face is comparable only when its bbox is at least `min_ratio` of
+/// the primary's width *and* at least `min_ratio` of its height. A face that
+/// is smaller on either axis is a background face and must be ignored.
+///
+/// Detector bboxes are `(x, y, w, h)` with positive dimensions. Non-finite
+/// dimensions and non-positive primaries are treated as non-comparable so a
+/// malformed detection can never reject an attempt spuriously.
+pub fn is_comparable_second_face(
+    primary: &Detection,
+    other: &Detection,
+    min_ratio: f32,
+) -> bool {
+    let (pw, ph) = (primary.bbox[2], primary.bbox[3]);
+    let (ow, oh) = (other.bbox[2], other.bbox[3]);
+    if !pw.is_finite()
+        || !ph.is_finite()
+        || !ow.is_finite()
+        || !oh.is_finite()
+        || !min_ratio.is_finite()
+        || pw <= 0.0
+        || ph <= 0.0
+    {
+        return false;
+    }
+    ow >= pw * min_ratio && oh >= ph * min_ratio
+}
 
 /// Outcome of one processed frame. Carries no score to any UI or log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,12 +146,26 @@ impl VisionPipeline {
             self.window.push(false);
             return Ok(FrameDecision::Reject(DenyReason::NoFace));
         }
-        if detections.len() > 1 {
+        // FR-13: only a comparable-size second face rejects. Small background
+        // faces are ignored; processing continues with the largest face.
+        // Select the largest face by bbox area so ordering of the detector's
+        // output cannot change the primary. Deterministic even for NaN areas.
+        let mut primary = &detections[0];
+        for d in detections.iter().skip(1) {
+            let area = |det: &Detection| det.bbox[2].max(0.0) * det.bbox[3].max(0.0);
+            if area(d) > area(primary) {
+                primary = d;
+            }
+        }
+        let comparable = detections
+            .iter()
+            .any(|other| is_comparable_second_face(primary, other, MULTI_FACE_MIN_RATIO));
+        if comparable {
             self.window.push(false);
             return Ok(FrameDecision::Reject(DenyReason::MultipleFaces));
         }
 
-        let best = detections[0];
+        let best = *primary;
         let aligned = self.aligner.align(frame, &best.landmarks)?;
         let embedding = self.embedder.embed(&aligned)?;
         let similarity = cosine(&embedding, enrolled);
