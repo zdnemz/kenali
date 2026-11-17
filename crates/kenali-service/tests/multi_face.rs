@@ -119,6 +119,17 @@ fn small_face_on_height_is_ignored() {
 }
 
 #[test]
+fn primary_selected_by_area_is_excluded_from_scan() {
+    // The largest face is not first. The primary index must be tracked (not
+    // hardcoded to 0) so it is still excluded from the comparable scan.
+    let mut p = pipeline(vec![
+        detection(0.0, 0.0, 0.3, 0.3),
+        detection(0.1, 0.1, 1.0, 1.0),
+    ]);
+    assert_eq!(p.process_frame(&frame()), Ok(FrameDecision::Pending));
+}
+
+#[test]
 fn helper_rejects_non_finite_and_invalid_primary_dimensions() {
     let primary = detection(0.0, 0.0, 1.0, 1.0);
     assert!(!is_comparable_second_face(
@@ -136,6 +147,14 @@ fn helper_rejects_non_finite_and_invalid_primary_dimensions() {
         &detection(0.0, 0.0, 1.0, 1.0),
         f32::NAN
     ));
+}
+
+#[test]
+fn single_face_is_not_rejected_as_multiple_faces() {
+    // A single face always compares "comparable" to itself; the pipeline must
+    // exclude the primary from the scan or it would reject this as MultipleFaces.
+    let mut one = pipeline(vec![detection(0.0, 0.0, 1.0, 1.0)]);
+    assert_eq!(one.process_frame(&frame()), Ok(FrameDecision::Pending));
 }
 
 #[test]

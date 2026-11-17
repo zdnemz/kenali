@@ -150,16 +150,20 @@ impl VisionPipeline {
         // faces are ignored; processing continues with the largest face.
         // Select the largest face by bbox area so ordering of the detector's
         // output cannot change the primary. Deterministic even for NaN areas.
-        let mut primary = &detections[0];
-        for d in detections.iter().skip(1) {
+        let mut primary_idx = 0usize;
+        for (idx, d) in detections.iter().enumerate().skip(1) {
             let area = |det: &Detection| det.bbox[2].max(0.0) * det.bbox[3].max(0.0);
-            if area(d) > area(primary) {
-                primary = d;
+            if area(d) > area(&detections[primary_idx]) {
+                primary_idx = idx;
             }
         }
-        let comparable = detections
-            .iter()
-            .any(|other| is_comparable_second_face(primary, other, MULTI_FACE_MIN_RATIO));
+        let primary = &detections[primary_idx];
+        // FR-13 compares the primary against *other* detections only. Skipping
+        // the primary index is essential: a face always compares comparable to
+        // itself, so including it would reject every non-empty frame.
+        let comparable = detections.iter().enumerate().any(|(idx, other)| {
+            idx != primary_idx && is_comparable_second_face(primary, other, MULTI_FACE_MIN_RATIO)
+        });
         if comparable {
             self.window.push(false);
             return Ok(FrameDecision::Reject(DenyReason::MultipleFaces));
