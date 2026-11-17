@@ -55,3 +55,16 @@ docs/reports/coverage.md
 tests/ci/integration_gate.sh
 tests/ci/goal_check.sh
 tests/ci/deliverables.txt
+
+# Wave 2 — CP spike (owned by W2-01..W2-06)
+crates/kenali-cp/src/guard.rs
+crates/kenali-cp/src/provider.rs
+crates/kenali-cp/src/credential.rs
+crates/kenali-cp/src/allowed_sid.rs
+crates/kenali-cp/src/kill_switch.rs
+crates/kenali-cp/src/scenarios.rs
+crates/kenali-winapi/src/pipes.rs
+crates/kenali-winapi/src/registry.rs
+crates/kenali-winapi/src/service.rs
+xtask/src/install.rs
+docs/spikes/P0-S1.md
