@@ -97,3 +97,24 @@ docs/spikes/P0-S4.md
 docs/spikes/P0-S5.md
 docs/spikes/P0-S10.md
 docs/spikes/P0-S11.md
+
+# Wave 4 — UI + CLI (owned by W4-01..W4-07)
+crates/kenali-winapi/src/ui.rs
+crates/kenali-winapi/src/admin_pipe.rs
+crates/kenali-winapi/src/preview_pipe.rs
+crates/kenali-ui/src/window.rs
+crates/kenali-ui/src/strings.rs
+crates/kenali-ui/src/theme.rs
+crates/kenali-ui/src/admin_client.rs
+crates/kenali-ui/src/pipe_worker.rs
+crates/kenali-ui/src/password_field.rs
+crates/kenali-ui/src/preview.rs
+crates/kenali-ui/src/dashboard.rs
+crates/kenali-ui/src/enrol.rs
+crates/kenali-ui/src/templates.rs
+crates/kenali-ui/src/settings.rs
+crates/kenali-ui/src/security.rs
+crates/kenali-ui/src/diagnostics.rs
+crates/kenali-ui/src/test_bench.rs
+tests/ui/walkthrough.md
+docs/reports/log_hygiene.md

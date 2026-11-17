@@ -215,3 +215,110 @@ while IFS= read -r p; do
 done < tests/ci/deliverables.txt
 
 echo "WAVE 3 INTEGRATION GATE PASS"
+
+# --- Wave 4 seams (append to tests/ci/integration_gate.sh) ---
+set -euo pipefail
+
+# UI/CLI depend only on core + ipc + winapi; never camera/vision/store/cp/bench
+rg -q 'kenali-core'   crates/kenali-ui/Cargo.toml
+rg -q 'kenali-ipc'    crates/kenali-ui/Cargo.toml
+rg -q 'kenali-winapi' crates/kenali-ui/Cargo.toml
+rg -q 'kenali-core'   crates/kenali-cli/Cargo.toml
+rg -q 'kenali-ipc'    crates/kenali-cli/Cargo.toml
+rg -q 'kenali-winapi' crates/kenali-cli/Cargo.toml
+! rg -q 'kenali-(camera|vision|store|cp|bench)' crates/kenali-ui/Cargo.toml
+! rg -q 'kenali-(camera|vision|store|cp|bench)' crates/kenali-cli/Cargo.toml
+
+# no auth-pipe types, secrets, camera, registry writes or file paths in UI/CLI source
+! rg -n 'AUTH_PIPE|AUTH_PIPE_PATH|AUTH_PIPE_SDDL|AuthPipeClient|kenali_ipc::auth|SecretWide' crates/kenali-ui/src crates/kenali-cli/src
+! rg -n 'HKEY|RegSetValue|HKLM|CreateFileW|kenali_camera|MfSource|FrameSource' crates/kenali-ui/src crates/kenali-cli/src
+
+# one shared typed admin client; every mutation is a typed admin command
+rg -q 'pub struct AdminPipeClient' crates/kenali-winapi/src/admin_pipe.rs
+rg -q 'pub fn exchange'            crates/kenali-winapi/src/admin_pipe.rs
+rg -q 'service_pid'                crates/kenali-winapi/src/admin_pipe.rs
+rg -q 'PROTO_VERSION'              crates/kenali-winapi/src/admin_pipe.rs
+rg -q -F '\\\\.\\pipe\\kenali.admin' crates/kenali-winapi/src/pipe_server.rs
+rg -q 'AdminRequest' crates/kenali-ui/src/pipe_worker.rs
+rg -q 'AdminResponse' crates/kenali-ui/src/pipe_worker.rs
+rg -q 'AdminPipeClient' crates/kenali-ui/src/admin_client.rs
+rg -q 'AdminRequest' crates/kenali-cli/src/main.rs
+rg -q 'AdminPipeClient' crates/kenali-cli/src/main.rs
+for cmd in GetStatus ListTemplates DeleteTemplate BeginEnrolment EnrolPassword SubmitSample \
+           FinishEnrolment CancelEnrolment BeginPreview EndPreview BeginTest \
+           BeginCalibration GetConfig SetConfig RefreshCredential SetEnabled \
+           ExportDiagnostics; do
+  rg -q "$cmd" crates/kenali-ui/src/pipe_worker.rs \
+    || { echo "FAIL UI worker missing typed command: $cmd"; exit 1; }
+done
+rg -q 'enum PipeCommand' crates/kenali-ui/src/pipe_worker.rs
+rg -q 'enum PipeEvent'   crates/kenali-ui/src/pipe_worker.rs
+rg -q 'crossbeam_channel::bounded' crates/kenali-ui/src/pipe_worker.rs
+! rg -n 'unwrap\(|expect\(|panic!|todo!|unimplemented!' crates/kenali-ui/src/pipe_worker.rs crates/kenali-cli/src/main.rs
+
+# elevation + single instance + per-monitor DPI live in winapi, not the UI crate
+rg -q -F 'Local\KenaliUiSingleInstance' crates/kenali-winapi/src/ui.rs
+rg -q 'pub fn acquire_ui_instance'      crates/kenali-winapi/src/ui.rs
+rg -q 'pub fn relaunch_elevated'        crates/kenali-winapi/src/ui.rs
+rg -q 'pub fn focus_existing_instance'  crates/kenali-winapi/src/ui.rs
+rg -q 'pub fn set_per_monitor_dpi_awareness' crates/kenali-winapi/src/ui.rs
+rg -q 'acquire_ui_instance' crates/kenali-ui/src/main.rs
+rg -q 'eframe::run_native'  crates/kenali-ui/src/main.rs
+rg -q 'impl eframe::App'    crates/kenali-ui/src/window.rs
+
+# seven screens, generic wording reused, no scores, dark/light + keyboard
+rg -q 'enum Screen' crates/kenali-ui/src/window.rs
+for s in Dashboard Enrol Templates Settings Security Diagnostics TestBench; do
+  rg -q "$s" crates/kenali-ui/src/window.rs || { echo "FAIL missing screen: $s"; exit 1; }
+done
+rg -q 'kenali_core::strings' crates/kenali-ui/src/strings.rs
+rg -q 'kenali_core::tiles'   crates/kenali-ui/src/strings.rs
+rg -q 'ThemeKind' crates/kenali-ui/src/theme.rs
+! rg -n -i 'score|similarity|confidence|pad margin' crates/kenali-ui/src/strings.rs
+
+# preview frames RAM-only and zeroized; password field cleared after submit
+rg -q 'Zeroizing' crates/kenali-ui/src/preview.rs
+rg -q 'pub fn clear' crates/kenali-ui/src/preview.rs
+rg -q 'preview_pipe::PreviewPipeClient' crates/kenali-ui/src/preview.rs
+rg -q 'MAX_PREVIEW_BYTES' crates/kenali-winapi/src/preview_pipe.rs
+rg -q 'Password::from_wide' crates/kenali-ui/src/password_field.rs
+rg -q 'clear()' crates/kenali-ui/src/password_field.rs
+! rg -n 'png|jpeg|jpg|encode_image|image::save' crates/kenali-ui/src
+
+# unsafe confined with SAFETY comments; UI/CLI stay forbid(unsafe_code)
+for c in kenali-winapi kenali-camera kenali-cp; do
+  ! rg -q 'forbid(unsafe_code)' crates/$c/src/lib.rs || { echo "FAIL forbid in $c"; exit 1; }
+done
+U=$( { rg -o --no-filename 'unsafe[[:space:]]*\{' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+S=$( { rg -o --no-filename '// SAFETY:' crates/kenali-winapi/src crates/kenali-camera/src crates/kenali-cp/src || true; } | wc -l)
+[ "$S" -ge "$U" ] || { echo "FAIL unsafe block without // SAFETY:"; exit 1; }
+rg -q '^#!\[forbid\(unsafe_code\)\]' crates/kenali-ui/src/lib.rs
+rg -q '^#!\[forbid\(unsafe_code\)\]' crates/kenali-ui/src/main.rs
+rg -q '^#!\[forbid\(unsafe_code\)\]' crates/kenali-cli/src/lib.rs
+rg -q '^#!\[forbid\(unsafe_code\)\]' crates/kenali-cli/src/main.rs
+
+# whole workspace MSVC type-check + all host suites (reaffirm waves 1-3)
+cargo check --target x86_64-pc-windows-msvc --locked --workspace
+cargo test --locked -p kenali-core -p kenali-ipc -p kenali-store -p kenali-vision -p kenali-bench
+
+# Win32-only test modules stay target-gated (host cargo test of Win32 crates is impossible)
+! rg -n '^[[:space:]]*#\[cfg\(test\)\]' crates/kenali-winapi/src crates/kenali-cp/src crates/kenali-camera/src crates/kenali-ui/src crates/kenali-cli/src
+
+# no unapproved placeholders (reaffirm over the new UI/CLI/winapi files)
+! rg -n --glob '!**/tests/**' --glob '!*.md' --glob '!tests/ci/**' \
+   -e 'TODO' -e 'lorem' -e 'unimplemented!\(\)' crates xtask fuzz
+
+# log hygiene + walkthrough docs exist; coverage + deliverables updated for wave 4
+test -s docs/reports/log_hygiene.md
+test -s tests/ui/walkthrough.md
+for id in FR-01 FR-05 FR-09 FR-14 FR-17 FR-18 FR-20 NFR-10 SEC-04; do
+  rg -q "^\\| $id .*type-checked \\+ owner VM" docs/reports/coverage.md \
+    || { echo "FAIL wave-4 coverage row: $id"; exit 1; }
+done
+while IFS= read -r p; do
+  [ -z "$p" ] && continue
+  case "$p" in \#*) continue ;; esac
+  test -s "$p" || { echo "FAIL missing/empty wave-4 deliverable: $p"; exit 1; }
+done < tests/ci/deliverables.txt
+
+echo "WAVE 4 INTEGRATION GATE PASS"
