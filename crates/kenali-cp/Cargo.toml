@@ -17,6 +17,7 @@ kenali-core = { path = "../kenali-core" }
 kenali-ipc = { path = "../kenali-ipc" }
 kenali-winapi = { path = "../kenali-winapi" }
 windows.workspace = true
+windows-core = "0.62"
 thiserror.workspace = true
 tracing.workspace = true
 zeroize.workspace = true
