@@ -17,7 +17,9 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 use kenali_ipc::admin::{AdminRequest, AdminResponse};
-use kenali_ipc::codec::{decode, encode, MAX_CONTROL_BYTES};
+use kenali_ipc::codec::{
+    decode, encode, MAX_CONTROL_BYTES, MAX_DIAG_CHUNK_BYTES, MAX_DIAG_TOTAL_BYTES,
+};
 use kenali_ipc::PROTO_VERSION;
 
 use crate::pipe_server::ADMIN_PIPE_PATH;
@@ -50,6 +52,8 @@ pub enum AdminPipeError {
     Io,
     #[error("malformed response")]
     Malformed,
+    #[error("diagnostics export exceeded its size limit")]
+    DiagnosticsTooLarge,
 }
 
 /// A connected, identity-verified handle to the admin pipe.
@@ -101,6 +105,16 @@ fn duration_to_ms(value: Duration) -> u32 {
         u32::MAX
     } else {
         ms as u32
+    }
+}
+
+/// Select the decode cap for a request. Diagnostics chunks are much larger
+/// than ordinary control messages, so they need a wider buffer.
+fn decode_cap_for(req: &AdminRequest) -> usize {
+    if matches!(req, AdminRequest::ExportDiagnostics) {
+        MAX_DIAG_CHUNK_BYTES
+    } else {
+        MAX_CONTROL_BYTES
     }
 }
 
@@ -192,6 +206,8 @@ impl AdminPipeClient {
             return Err(AdminPipeError::Io);
         }
 
+        let decode_cap = decode_cap_for(req);
+
         let mut written = 0u32;
         // SAFETY: `framed` is a live allocation of `framed.len()` bytes,
         // `written` is a valid out-pointer, `self.handle` is a valid
@@ -210,7 +226,7 @@ impl AdminPipeClient {
         }
 
         let deadline = Instant::now() + self.timeout;
-        let mut buf = Zeroizing::new(vec![0u8; MAX_CONTROL_BYTES]);
+        let mut buf = Zeroizing::new(vec![0u8; decode_cap]);
         loop {
             let mut available = 0u32;
             // SAFETY: `self.handle` is valid, the buffer pointer is None (this
@@ -236,9 +252,9 @@ impl AdminPipeClient {
         }
 
         let mut read = 0u32;
-        // SAFETY: `buf` is a live allocation of MAX_CONTROL_BYTES bytes,
-        // `read` is a valid out-pointer, `self.handle` is valid and the NULL
-        // overlapped pointer matches the synchronous handle.
+        // SAFETY: `buf` is a live allocation of `decode_cap` bytes, `read` is a
+        // valid out-pointer, `self.handle` is valid and the NULL overlapped
+        // pointer matches the synchronous handle.
         let ok = unsafe {
             raw::read_file(
                 self.handle,
@@ -257,7 +273,13 @@ impl AdminPipeClient {
         }
 
         let response: AdminResponse =
-            decode(&buf[..len], MAX_CONTROL_BYTES).map_err(|_| AdminPipeError::Malformed)?;
+            decode(&buf[..len], decode_cap).map_err(|_| AdminPipeError::Malformed)?;
+
+        if let AdminResponse::DiagnosticsChunk { bytes, .. } = &response {
+            if bytes.as_slice().len() > MAX_DIAG_TOTAL_BYTES {
+                return Err(AdminPipeError::DiagnosticsTooLarge);
+            }
+        }
 
         if let AdminResponse::Hello { proto, .. } = &response {
             if *proto != PROTO_VERSION {
@@ -308,5 +330,20 @@ mod tests {
             assert!(!text.contains("S-1-"));
             assert!(!text.contains("C:\\"));
         }
+    }
+
+    #[test]
+    fn diagnostics_export_uses_larger_decode_cap() {
+        assert_eq!(
+            decode_cap_for(&AdminRequest::ExportDiagnostics),
+            MAX_DIAG_CHUNK_BYTES,
+        );
+        assert_eq!(MAX_DIAG_CHUNK_BYTES, 65536);
+    }
+
+    #[test]
+    fn other_requests_use_control_decode_cap() {
+        assert_eq!(decode_cap_for(&AdminRequest::GetStatus), MAX_CONTROL_BYTES);
+        assert_eq!(MAX_CONTROL_BYTES, 4096);
     }
 }
