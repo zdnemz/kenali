@@ -572,3 +572,100 @@ rg -qi 'kill switch|lockout|lock-out|recovery' "$CIDOC" \
     "$WF" "$NSIS" "$CIDOC"
 
 echo "CI INSTALLER INTEGRATION GATE PASS"
+
+# --- Pre-push hook seams (append to tests/ci/integration_gate.sh) ---
+set -euo pipefail
+
+HOOK=.husky/pre-push
+VALIDATOR=scripts/validate-pre-push.sh
+PKG=package.json
+NSISDOC=tools/nsis/README.md
+
+# static only: never execute the hook or the validator here
+test -s "$PKG"          || { echo "FAIL missing package.json"; exit 1; }
+test -s "$HOOK"         || { echo "FAIL missing pre-push hook: $HOOK"; exit 1; }
+test -x "$HOOK"         || { echo "FAIL pre-push hook is not executable: $HOOK"; exit 1; }
+test -s "$VALIDATOR"    || { echo "FAIL missing validator: $VALIDATOR"; exit 1; }
+test -s "$NSISDOC"      || { echo "FAIL missing NSIS toolchain doc: $NSISDOC"; exit 1; }
+
+# 1. Husky wiring: devDependency + prepare, so npm install installs the hooks
+rg -q '"husky"' "$PKG"          || { echo "FAIL package.json missing husky devDependency"; exit 1; }
+rg -q '"prepare"[[:space:]]*:[[:space:]]*"husky"' "$PKG" \
+  || { echo "FAIL package.json prepare script does not run husky"; exit 1; }
+for s in lint check validate; do
+  rg -q "\"$s\"[[:space:]]*:" "$PKG" \
+    || { echo "FAIL package.json missing script: $s"; exit 1; }
+done
+rg -q 'validate-pre-push\.sh' "$PKG" \
+  || { echo "FAIL package.json scripts do not invoke the validator"; exit 1; }
+
+# 2. hook invokes the validator directly, so it works without husky installed
+rg -q 'pre-push' "$HOOK"           || { echo "FAIL hook missing pre-push marker"; exit 1; }
+rg -q 'validate-pre-push\.sh' "$HOOK" \
+  || { echo "FAIL hook does not invoke the validator"; exit 1; }
+rg -q 'exit 1' "$HOOK"             || { echo "FAIL hook has no non-zero abort path"; exit 1; }
+rg -q -- '--no-verify' "$HOOK"     || { echo "FAIL hook missing --no-verify escape hatch"; exit 1; }
+
+# 3. validator covers every required step, portably and loudly
+rg -q 'set -euo pipefail' "$VALIDATOR" \
+  || { echo "FAIL validator missing set -euo pipefail"; exit 1; }
+rg -q 'cargo fmt --check' "$VALIDATOR" \
+  || { echo "FAIL validator missing cargo fmt --check"; exit 1; }
+rg -q 'cargo check --target x86_64-pc-windows-msvc --locked --workspace' "$VALIDATOR" \
+  || { echo "FAIL validator missing windows-target cargo check"; exit 1; }
+rg -q 'tests/ci/integration_gate\.sh' "$VALIDATOR" \
+  || { echo "FAIL validator missing integration_gate.sh"; exit 1; }
+rg -q 'tests/ci/goal_check\.sh' "$VALIDATOR" \
+  || { echo "FAIL validator missing goal_check.sh"; exit 1; }
+rg -q 'kenali\.nsi' "$VALIDATOR" \
+  || { echo "FAIL validator does not compile the NSIS installer"; exit 1; }
+for d in KENALI_NSIS_INCLUDE KENALI_VERSION KENALI_CLSID KENALI_STAGE_DIR \
+         KENALI_SVC_EXE KENALI_CP_DLL KENALI_UI_EXE KENALI_CLI_EXE; do
+  rg -q "$d" "$VALIDATOR" \
+    || { echo "FAIL validator missing NSIS define: $d"; exit 1; }
+done
+for m in PASS SKIP FAIL; do
+  rg -q "$m" "$VALIDATOR" || { echo "FAIL validator missing $m summary line"; exit 1; }
+done
+rg -q 'tools/nsis' "$VALIDATOR" \
+  || { echo "FAIL validator missing local NSIS toolchain lookup"; exit 1; }
+
+# 4. the hook must skip (not fail) when the toolchain is unavailable offline,
+#    and must fail a real compile error. Anchor both branches statically.
+rg -q 'apt-get download' "$VALIDATOR" \
+  || { echo "FAIL validator does not provision NSIS without root"; exit 1; }
+rg -q 'dpkg-deb -x' "$VALIDATOR" \
+  || { echo "FAIL validator does not unpack the NSIS debs"; exit 1; }
+rg -qi 'skip|unavailable|offline' "$VALIDATOR" \
+  || { echo "FAIL validator has no offline skip path"; exit 1; }
+
+# 5. NSIS cache is gitignored (binaries never committed) but its README is not
+rg -q -F 'tools/nsis' .gitignore \
+  || { echo "FAIL .gitignore does not ignore the NSIS cache"; exit 1; }
+rg -q 'node_modules' .gitignore \
+  || { echo "FAIL .gitignore does not ignore node_modules"; exit 1; }
+test -s "$NSISDOC" \
+  || { echo "FAIL NSIS provisioning doc missing"; exit 1; }
+rg -q 'apt-get download' "$NSISDOC" \
+  || { echo "FAIL NSIS doc does not describe rootless provisioning"; exit 1; }
+rg -qi 'offline' "$NSISDOC" \
+  || { echo "FAIL NSIS doc does not describe offline behaviour"; exit 1; }
+git check-ignore -q tools/nsis/bin/makensis \
+  || { echo "FAIL git does not ignore provisioned makensis"; exit 1; }
+! git check-ignore -q tools/nsis/README.md \
+  || { echo "FAIL git ignores the tracked NSIS README"; exit 1; }
+
+# 6. the CI doc describes the hook, what it checks and the bypass
+rg -qi 'pre-push' "$CIDOC" \
+  || { echo "FAIL CI doc does not mention the pre-push hook"; exit 1; }
+rg -q -- '--no-verify' "$CIDOC" \
+  || { echo "FAIL CI doc does not document the bypass"; exit 1; }
+
+# 7. no secrets in the new files
+! rg -n -e 'BEGIN (RSA )?PRIVATE KEY' -e 'MII[A-Za-z0-9+/]{80,}' \
+    -e 'KENALI_SIGN_CERT_[A-Z_]*=[^$[:space:]]' \
+    "$PKG" "$HOOK" "$VALIDATOR" "$NSISDOC" "$CIDOC" \
+  || { echo "FAIL secret literal in pre-push tooling"; exit 1; }
+
+echo "PRE-PUSH HOOK INTEGRATION GATE PASS"
+

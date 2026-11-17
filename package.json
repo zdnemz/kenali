@@ -1,0 +1,15 @@
+{
+  "name": "kenali",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local developer tooling for the Kenali repository (git hooks and pre-push validation).",
+  "scripts": {
+    "prepare": "husky",
+    "lint": "bash scripts/validate-pre-push.sh",
+    "check": "bash scripts/validate-pre-push.sh",
+    "validate": "bash scripts/validate-pre-push.sh"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

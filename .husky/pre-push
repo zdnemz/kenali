@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+# Kenali pre-push hook: run the local validations before anything reaches CI.
+#
+# Dependency-free by design: it calls scripts/validate-pre-push.sh directly, so
+# it works even when Husky itself is not installed (fresh clone that has not run
+# `npm install`, or an explicit `sh .husky/pre-push`).
+#
+# Bypass once with: git push --no-verify
+set -eu
+
+# Husky v9 *sources* this file, so $0 points at its wrapper rather than here.
+# Resolve the repository root by probing for the validator, not by trusting $0.
+find_root() {
+  if root=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$root" ]; then
+    if [ -f "$root/scripts/validate-pre-push.sh" ]; then
+      printf '%s\n' "$root"
+      return 0
+    fi
+  fi
+  for root in \
+    "$(dirname -- "$0")/.." \
+    "$(dirname -- "$0")/../.." \
+    "$PWD"; do
+    if [ -f "$root/scripts/validate-pre-push.sh" ]; then
+      (CDPATH= cd -- "$root" && pwd)
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! ROOT=$(find_root); then
+  echo "pre-push: refusing to push: scripts/validate-pre-push.sh not found" >&2
+  echo "pre-push: restore the validator, or push with: git push --no-verify" >&2
+  exit 1
+fi
+
+VALIDATOR="$ROOT/scripts/validate-pre-push.sh"
+
+if [ ! -f "$VALIDATOR" ]; then
+  echo "pre-push: refusing to push: validator not found at $VALIDATOR" >&2
+  echo "pre-push: restore scripts/validate-pre-push.sh, or push with: git push --no-verify" >&2
+  exit 1
+fi
+
+# git passes <remote-name> <remote-url>; the validator ignores them.
+exec bash "$VALIDATOR" "$@"
