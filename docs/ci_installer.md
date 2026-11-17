@@ -42,3 +42,57 @@ Verify the SHA-256 hashes in `SHA256SUMS.txt` before running anything (for examp
 Do **not** run the installer on the account you rely on to sign in. Test an installer build in a disposable Windows 11 VM with a checkpoint taken first, then on a secondary local-admin account, and only last on the main account. Never install over an existing version in place: the installer uses a versioned `C:\Program Files\Kenali\<version>\` directory and records the previous version for rollback. Before installing, read `docs/dev_safety_runbook.md` for the pre-flight checklist, the **kill switch** (`Disabled=1` under the provider CLSID and `HKLM\SOFTWARE\Kenali`), Safe Mode / WinRE recovery drills and rollback steps. Keep a working password and a second administrator account available at all times — an unhealthy credential provider can otherwise cause a lock-out.
 
 CI only builds and signs; it does not install or register anything on any machine. Verification of the installer, registration and recovery remains a manual owner-run task on Windows.
+
+## Pre-push hook (`husky` + `scripts/validate-pre-push.sh`)
+
+Eight consecutive `build-installer.yml` failures were all detectable without GitHub. To stop that class of failure from reaching CI, the repository ships a pre-push hook that runs the same validations locally before the objects leave the machine.
+
+The hook is wired with [Husky](https://typicode.github.io/husky/). `package.json` declares the `husky` devDependency and a `prepare` script, so a single `npm install` enables the hooks for that clone. `.husky/pre-push` is committed and executable, and it calls `scripts/validate-pre-push.sh` **directly** — no Husky runtime is needed for the hook itself to work, so an existing clone keeps validating even if `npm install` has not been run.
+
+`npm run lint`, `npm run check` and `npm run validate` all invoke the same validator, so the checks can be run on demand without pushing.
+
+### What it checks
+
+| Check | Behaviour when the environment cannot run it |
+|---|---|
+| `cargo fmt --check` | Skipped with a warning if `cargo` or `rustfmt` is missing. |
+| `cargo check --target x86_64-pc-windows-msvc --locked --workspace` | Skipped with a warning if `cargo` is missing. |
+| `bash tests/ci/integration_gate.sh` | Always runs. |
+| `bash tests/ci/goal_check.sh` | Always runs. |
+| GitHub Actions workflow YAML (parse + triggers, job, installer-step tokens) | Skipped with a warning if `python3` or PyYAML is missing. |
+| **Compile of `installer/kenali.nsi` with `makensis`** | Skipped with a warning when no NSIS toolchain is reachable offline. |
+
+The NSIS compile is the important one. The validator creates a temporary staging directory, writes dummy versions of the four release binaries plus the SBOM, and compiles the real script with every `/DKENALI_*` define the workflow passes (`KENALI_NSIS_INCLUDE`, `KENALI_VERSION`, `KENALI_CLSID`, `KENALI_STAGE_DIR`, `KENALI_SVC_EXE`, `KENALI_CP_DLL`, `KENALI_UI_EXE`, `KENALI_CLI_EXE`). Output and dummies stay in the temporary directory, so the working tree is never modified.
+
+This catches the failures that actually broke CI, including `Invalid command: "${GetFullPath}"` — `${Name}` only expands for `!define`d names, so referencing a non-existent macro aborts the compile. It also catches commands used from the wrong section and `File` instructions pointing at files that are not staged.
+
+### NSIS toolchain without root
+
+`makensis` is not installed on the Linux host. On first use the validator provisions it automatically by running `apt-get download nsis nsis-common` (no root required), unpacking the `.deb` files with `dpkg-deb -x`, and caching `bin/makensis` plus `share/nsis/{Include,Stubs}` under the gitignored `tools/nsis/`. Later runs reuse the cache with no network access. See `tools/nsis/README.md` for the manual procedure and the cache layout.
+
+The rule is deliberately asymmetric:
+
+- **Toolchain present** (cached, freshly provisioned, or `makensis` on `PATH`) → the compile always runs, and a compile error **fails the push**.
+- **Toolchain unavailable and offline** → the check is **skipped with a loud warning**; the push proceeds.
+
+So a missing toolchain never blocks work, but a broken installer script is never waved through.
+
+### Summary output and bypass
+
+Every run ends with an explicit tally:
+
+```
+pre-push summary: 5 passed, 1 skipped, 1 failed
+FAIL  NSIS installer compile
+```
+
+Any `FAIL` exits non-zero, which aborts the push before anything is transferred. `SKIP` never fails the push.
+
+To bypass the hook once — for example when validating on a machine that cannot run Rust at all — push with:
+
+```sh
+git push --no-verify
+```
+
+Use it as an escape hatch, not a habit: CI will still apply the same installer checks, and a failure there costs a full CI round trip. There is no way to bypass the hook for every push without editing `.husky/pre-push`, which the static gate in `tests/ci/integration_gate.sh` detects.
+

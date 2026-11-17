@@ -28,3 +28,11 @@ captures/
 *.pfx
 *.pfx.b64
 *.p12
+
+# Local tooling dependencies (Husky hooks); npm install recreates them
+node_modules/
+
+# Local NSIS toolchain cache: third-party binaries are never committed.
+# Only the README describing provisioning is tracked.
+/tools/nsis/*
+!/tools/nsis/README.md
