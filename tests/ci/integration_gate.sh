@@ -420,3 +420,79 @@ while IFS= read -r p; do
 done < tests/ci/deliverables.txt
 
 echo "WAVE 5 INTEGRATION GATE PASS"
+
+# --- CI installer seams (append to tests/ci/integration_gate.sh) ---
+set -euo pipefail
+
+WF=.github/workflows/build-installer.yml
+NSIS=installer/kenali.nsi
+CIDOC=docs/ci_installer.md
+
+# files exist and are non-empty (static only — never run makensis/signtool here)
+test -s "$WF" || { echo "FAIL missing/empty workflow: $WF"; exit 1; }
+test -s "$NSIS" || { echo "FAIL missing/empty NSIS script: $NSIS"; exit 1; }
+test -s "$CIDOC" || { echo "FAIL missing/empty CI doc: $CIDOC"; exit 1; }
+
+# 1. YAML parse: triggers + job id + runs-on (PyYAML; rg/test fallback)
+if python3 -c 'import yaml' >/dev/null 2>&1; then
+  python3 - "$WF" <<'PY'
+import sys, yaml
+with open(sys.argv[1], encoding='utf-8') as fh:
+    d = yaml.safe_load(fh)
+trig = d.get('on', d.get(True))
+assert 'workflow_dispatch' in trig, 'missing workflow_dispatch trigger'
+assert 'main' in trig['push']['branches'], 'push.branches missing main'
+assert 'v*' in trig['push']['tags'], 'push.tags missing v*'
+j = d['jobs']['build-installer']
+assert j['runs-on'] == 'windows-latest', 'runs-on is not windows-latest'
+PY
+else
+  rg -q -F -- 'workflow_dispatch:' "$WF" || { echo "FAIL workflow trigger: workflow_dispatch"; exit 1; }
+  rg -q -F -- 'main' "$WF" || { echo "FAIL workflow push.branches: main"; exit 1; }
+  rg -q -F -- 'v*' "$WF" || { echo "FAIL workflow push.tags: v*"; exit 1; }
+  rg -q -F -- 'build-installer:' "$WF" || { echo "FAIL workflow job id: build-installer"; exit 1; }
+  rg -q -F -- 'runs-on: windows-latest' "$WF" || { echo "FAIL workflow runs-on: windows-latest"; exit 1; }
+fi
+
+# 2. D1: NSIS tokens with exactly one OutFile (use -F -- for literal/-leading tokens)
+test "$(rg -c '^[[:space:]]*OutFile\b' "$NSIS")" = 1 \
+  || { echo "FAIL NSIS OutFile count (expected exactly one)"; exit 1; }
+for t in \
+  'RequestExecutionLevel admin' 'C:\Program Files\Kenali' 'KENALI_VERSION' \
+  'KENALI_CLSID' 'KENALI_STAGE_DIR' 'KENALI_SVC_EXE' 'KENALI_CP_DLL' \
+  'KENALI_UI_EXE' 'KENALI_CLI_EXE' 'kenali-svc.exe' 'kenali-cp.dll' \
+  'kenali-ui.exe' 'kenali.exe' 'SMPROGRAMS' 'InprocServer32' \
+  'Authentication\Credential Providers' 'HKLM\SOFTWARE\Kenali' \
+  'PreviousVersion' 'KenaliSvc' 'sc.exe create' 'sc.exe delete' \
+  'sc.exe start' 'sc.exe stop' 'Section Uninstall' '!error'; do
+  rg -q -F -- "$t" "$NSIS" || { echo "FAIL NSIS token: $t"; exit 1; }
+done
+
+# 3. D2: workflow tokens + CLSID parse from KENALI_CP_CLSID
+for t in \
+  'windows-latest' '1.96.0' 'x86_64-pc-windows-msvc' '--locked' '--release' \
+  'choco install nsis' 'secrets.KENALI_SIGN_CERT_B64' \
+  'secrets.KENALI_SIGN_CERT_PASSWORD' 'kenali-signing.pfx' \
+  'signtool.exe' '/fd SHA256' 'makensis.exe' 'KENALI_VERSION' \
+  'KENALI_CLSID' 'KENALI_STAGE_DIR' 'KENALI_SVC_EXE' 'KENALI_CP_DLL' \
+  'KENALI_UI_EXE' 'KENALI_CLI_EXE' 'Get-FileHash -Algorithm SHA256' \
+  'SHA256SUMS.txt' 'actions/upload-artifact@v4' 'if: always()'; do
+  rg -q -F -- "$t" "$WF" || { echo "FAIL workflow token: $t"; exit 1; }
+done
+rg -q -- 'KENALI_CP_CLSID' "$WF" || { echo "FAIL workflow CLSID parse: KENALI_CP_CLSID"; exit 1; }
+
+# CI doc owner-run warning
+rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
+rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \
+  || { echo "FAIL CI doc safety runbook reference"; exit 1; }
+rg -qi 'kill switch|lockout|lock-out|recovery' "$CIDOC" \
+  || { echo "FAIL CI doc recovery note"; exit 1; }
+
+# 4. no secret literals or secret echoes in workflow, NSIS script or CI doc
+! rg -n -e 'BEGIN (RSA )?PRIVATE KEY' -e 'MII[A-Za-z0-9+/]{80,}' \
+    "$WF" "$NSIS" "$CIDOC"
+! rg -n -i -e 'echo[^\n]*KENALI_SIGN_CERT' \
+    -e 'Write-(Host|Output)[^\n]*KENALI_SIGN_CERT' \
+    "$WF" "$NSIS" "$CIDOC"
+
+echo "CI INSTALLER INTEGRATION GATE PASS"

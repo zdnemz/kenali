@@ -151,4 +151,14 @@ for id in NFR-08 NFR-09 SEC-11 SEC-13; do
     || { echo "FAIL wave-5 host coverage row not updated: $id"; exit 1; }
 done
 
-echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 + Wave 3 + Wave 4 + Wave 5 static coverage and gates; runtime/hardware/UAC/VM/signing proof is manual per BRIEF.md)"
+# --- CI installer additions to the goal-check proxy (append to tests/ci/goal_check.sh) ---
+
+# CI installer static coverage: new workflow/NSIS/doc deliverables must be non-empty
+for p in \
+  .github/workflows/build-installer.yml \
+  installer/kenali.nsi \
+  docs/ci_installer.md; do
+  test -s "$p" || { echo "FAIL missing CI installer deliverable: $p"; exit 1; }
+done
+
+echo "GOAL CHECK PASS (proxy: Wave 1 + Wave 2 + Wave 3 + Wave 4 + Wave 5 static coverage and gates + CI installer static coverage; runtime/hardware/UAC/VM/signing/Windows-install proof is manual per BRIEF.md)"
