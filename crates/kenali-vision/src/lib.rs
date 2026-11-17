@@ -8,6 +8,7 @@
 
 pub mod align;
 pub mod decision;
+pub mod onnx;
 pub mod preprocess;
 pub mod traits;
 
