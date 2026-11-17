@@ -2160,6 +2160,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "windows 0.62.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -2235,6 +2236,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -2280,6 +2282,7 @@ dependencies = [
  "ort",
  "proptest",
  "serde",
+ "sha2",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -2290,6 +2293,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "kenali-ipc",
+ "kenali-store",
  "thiserror 2.0.21",
  "tracing",
  "windows 0.62.2",

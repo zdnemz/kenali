@@ -12,3 +12,4 @@ windows.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
+zeroize.workspace = true
