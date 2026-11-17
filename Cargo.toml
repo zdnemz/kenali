@@ -58,6 +58,12 @@ windows = { version = "0.62", features = [
     "Win32_System_Registry",
     "Win32_System_RemoteDesktop",
     "Win32_Graphics_Gdi",
+    # Wave 3 additive features (verified against windows 0.62.2 / docs.rs):
+    # NCrypt/CNG, Event Log ReportEventW, IMFSourceReader, server ReadFile/WriteFile.
+    "Win32_Security_Cryptography",
+    "Win32_System_EventLog",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_IO",
 ] }
 ort = { version = "=2.0.0-rc.13", features = ["load-dynamic"] }
 egui = "0.31"
