@@ -6,14 +6,17 @@
 //! side: SDDL-secured admin/preview pipes, peer-PID verification, the CNG/TPM
 //! key hierarchy, the Event Log writer and the SCM service host.
 
+pub mod admin_pipe;
 pub mod com;
 pub mod eventlog;
 pub mod pipe_server;
 pub mod pipes;
+pub mod preview_pipe;
 pub mod registry;
 pub mod service;
 pub mod service_host;
 pub mod tpm;
+pub mod ui;
 
 #[cfg(windows)]
 use windows::Win32::Foundation::HANDLE;
