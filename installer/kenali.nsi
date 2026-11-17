@@ -21,9 +21,15 @@
 ; workflow before makensis.exe compiles this script.
 ;
 ; Required defines (all supplied by the workflow via /D; no hidden defaults):
-;   KENALI_VERSION, KENALI_CLSID, KENALI_STAGE_DIR,
+;   KENALI_NSIS_INCLUDE, KENALI_VERSION, KENALI_CLSID, KENALI_STAGE_DIR,
 ;   KENALI_SVC_EXE, KENALI_CP_DLL, KENALI_UI_EXE, KENALI_CLI_EXE
 ; ---------------------------------------------------------------------------
+
+!ifdef KENALI_NSIS_INCLUDE
+  !addincludedir "${KENALI_NSIS_INCLUDE}"
+!else
+  !error "KENALI_NSIS_INCLUDE must be defined"
+!endif
 
 !ifndef KENALI_VERSION
   !error "KENALI_VERSION must be defined (e.g. /DKENALI_VERSION=0.1.0)"

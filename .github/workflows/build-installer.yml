@@ -181,7 +181,7 @@ jobs:
             throw "NSIS Include directory not found: $includeDir"
           }
           & $env:MAKENSIS `
-            "/I$includeDir" `
+            "/DKENALI_NSIS_INCLUDE=$includeDir" `
             "/DKENALI_VERSION=$version" `
             "/DKENALI_CLSID=$env:KENALI_CLSID" `
             "/DKENALI_STAGE_DIR=$stage" `
