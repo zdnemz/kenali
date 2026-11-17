@@ -1,0 +1,7 @@
+# cargo-audit configuration for CI hygiene (Wave 5).
+[advisories]
+# Justification for ignores below:
+#   RUSTSEC-2026-0194 and RUSTSEC-2026-0195 are transitive quick-xml advisories
+#   pulled in via eframe/egui/accesskit. They are Linux-only and absent from the
+#   shipped Windows binaries. Upgrading is blocked by the pinned upstream graph.
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
