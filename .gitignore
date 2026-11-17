@@ -23,3 +23,8 @@ models/*.onnx
 *.capture
 faces/
 captures/
+
+# Signing material is never committed (injected by CI from secrets)
+*.pfx
+*.pfx.b64
+*.p12
