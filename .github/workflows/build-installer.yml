@@ -1,0 +1,200 @@
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    env:
+      TARGET_TRIPLE: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_type }}"
+          $ref = "${{ github.ref_name }}"
+          if ($tag -eq 'tag' -and $ref -like 'v*') {
+            $version = $ref.Substring(1)
+          } else {
+            $manifest = Get-Content -Raw -LiteralPath 'Cargo.toml'
+            if ($manifest -match '(?ms)^\[workspace\.package\]\s*.*?^version\s*=\s*"([^"]+)"') {
+              $version = $Matches[1]
+            } else {
+              throw 'Could not read [workspace.package].version from Cargo.toml'
+            }
+          }
+          if (-not $version) { throw 'Computed an empty version' }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.96.0
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build release binaries
+        shell: pwsh
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc --workspace
+
+      - name: Stage package
+        shell: pwsh
+        run: cargo run --locked --package xtask -- package
+
+      - name: Ensure staged binaries are present
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'target\package'
+          $release = Join-Path $env:GITHUB_WORKSPACE 'target\x86_64-pc-windows-msvc\release'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $binaries = @(
+            'kenali-svc.exe',
+            'kenali-cp.dll',
+            'kenali-ui.exe',
+            'kenali.exe'
+          )
+          foreach ($binary in $binaries) {
+            $staged = Join-Path $stage $binary
+            if (-not (Test-Path -LiteralPath $staged -PathType Leaf)) {
+              Copy-Item -LiteralPath (Join-Path $release $binary) -Destination $staged -Force
+            }
+            if (-not (Test-Path -LiteralPath $staged -PathType Leaf)) {
+              throw "Missing staged binary: $binary"
+            }
+          }
+
+      - name: Read credential provider CLSID
+        id: clsid
+        shell: pwsh
+        run: |
+          $source = Get-Content -Raw -LiteralPath 'crates\kenali-winapi\src\com.rs'
+          if ($source -match 'KENALI_CP_CLSID\s*:\s*&str\s*=\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"') {
+            $clsid = $Matches[1]
+          } else {
+            throw 'Could not parse a 36-char lowercase GUID from KENALI_CP_CLSID in crates/kenali-winapi/src/com.rs'
+          }
+          "KENALI_CLSID=$clsid" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "clsid=$clsid" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Decode signing certificate
+        shell: pwsh
+        env:
+          KENALI_SIGN_CERT_B64: ${{ secrets.KENALI_SIGN_CERT_B64 }}
+        run: |
+          if (-not $env:KENALI_SIGN_CERT_B64) {
+            throw 'KENALI_SIGN_CERT_B64 secret is not configured'
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'kenali-signing.pfx'
+          [System.IO.File]::WriteAllBytes($pfx, [System.Convert]::FromBase64String($env:KENALI_SIGN_CERT_B64))
+          if (-not (Test-Path -LiteralPath $pfx -PathType Leaf)) { throw 'Failed to decode signing certificate' }
+
+      - name: Sign staged binaries
+        shell: pwsh
+        env:
+          KENALI_SIGN_CERT_PASSWORD: ${{ secrets.KENALI_SIGN_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'kenali-signing.pfx'
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'target\package'
+          $binaries = @(
+            (Join-Path $stage 'kenali-svc.exe'),
+            (Join-Path $stage 'kenali-cp.dll'),
+            (Join-Path $stage 'kenali-ui.exe'),
+            (Join-Path $stage 'kenali.exe')
+          )
+          foreach ($binary in $binaries) {
+            if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) { throw "Missing binary to sign: $binary" }
+            & signtool.exe sign /fd SHA256 /f $pfx /p $env:KENALI_SIGN_CERT_PASSWORD $binary
+            if ($LASTEXITCODE -ne 0) { throw "signtool.exe failed for $binary (exit $LASTEXITCODE)" }
+          }
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          KENALI_STAGE_DIR: ${{ github.workspace }}\target\package
+        run: |
+          $version = $env:VERSION
+          $stage = $env:KENALI_STAGE_DIR
+          $script = Join-Path $env:GITHUB_WORKSPACE 'installer\kenali.nsi'
+          $output = "kenali-$version-$env:TARGET_TRIPLE-setup.exe"
+          & makensis.exe `
+            "/DKENALI_VERSION=$version" `
+            "/DKENALI_CLSID=$env:KENALI_CLSID" `
+            "/DKENALI_STAGE_DIR=$stage" `
+            "/DKENALI_SVC_EXE=$stage\kenali-svc.exe" `
+            "/DKENALI_CP_DLL=$stage\kenali-cp.dll" `
+            "/DKENALI_UI_EXE=$stage\kenali-ui.exe" `
+            "/DKENALI_CLI_EXE=$stage\kenali.exe" `
+            $script
+          if ($LASTEXITCODE -ne 0) { throw "makensis.exe failed (exit $LASTEXITCODE)" }
+          if (-not (Test-Path -LiteralPath $output -PathType Leaf)) { throw "Installer not found: $output" }
+          "INSTALLER=$output" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Sign installer
+        shell: pwsh
+        env:
+          KENALI_SIGN_CERT_PASSWORD: ${{ secrets.KENALI_SIGN_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'kenali-signing.pfx'
+          & signtool.exe sign /fd SHA256 /f $pfx /p $env:KENALI_SIGN_CERT_PASSWORD $env:INSTALLER
+          if ($LASTEXITCODE -ne 0) { throw "signtool.exe failed for installer (exit $LASTEXITCODE)" }
+
+      - name: Clean up signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'kenali-signing.pfx'
+          if (Test-Path -LiteralPath $pfx -PathType Leaf) {
+            Remove-Item -LiteralPath $pfx -Force
+          }
+
+      - name: Create staged package archive
+        shell: pwsh
+        run: |
+          $version = $env:VERSION
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'target\package'
+          $archive = "kenali-package-$version-$env:TARGET_TRIPLE.zip"
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $archive -Force
+          "PACKAGE_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Compute SHA-256 checksums
+        shell: pwsh
+        run: |
+          $version = $env:VERSION
+          $lines = @()
+          foreach ($file in @($env:PACKAGE_ARCHIVE, $env:INSTALLER)) {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+            $lines += "$hash  $([System.IO.Path]::GetFileName($file))"
+          }
+          Set-Content -LiteralPath 'SHA256SUMS.txt' -Value $lines -Encoding utf8
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kenali-package-${{ env.VERSION }}-x86_64-pc-windows-msvc
+          path: ${{ env.PACKAGE_ARCHIVE }}
+          if-no-files-found: error
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kenali-installer-${{ env.VERSION }}-x86_64-pc-windows-msvc
+          path: ${{ env.INSTALLER }}
+          if-no-files-found: error
+
+      - name: Upload checksums artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kenali-checksums-${{ env.VERSION }}-x86_64-pc-windows-msvc
+          path: SHA256SUMS.txt
+          if-no-files-found: error
