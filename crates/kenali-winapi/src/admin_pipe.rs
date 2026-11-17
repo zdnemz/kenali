@@ -108,6 +108,16 @@ fn duration_to_ms(value: Duration) -> u32 {
     }
 }
 
+/// Select the decode cap for a request. Diagnostics chunks are much larger
+/// than ordinary control messages, so they need a wider buffer.
+fn decode_cap_for(req: &AdminRequest) -> usize {
+    if matches!(req, AdminRequest::ExportDiagnostics) {
+        MAX_DIAG_CHUNK_BYTES
+    } else {
+        MAX_CONTROL_BYTES
+    }
+}
+
 #[cfg(windows)]
 impl AdminPipeClient {
     /// Wait up to `timeout` for an admin-pipe instance, open it synchronously,
@@ -196,11 +206,7 @@ impl AdminPipeClient {
             return Err(AdminPipeError::Io);
         }
 
-        let decode_cap = if matches!(req, AdminRequest::ExportDiagnostics) {
-            MAX_DIAG_CHUNK_BYTES
-        } else {
-            MAX_CONTROL_BYTES
-        };
+        let decode_cap = decode_cap_for(req);
 
         let mut written = 0u32;
         // SAFETY: `framed` is a live allocation of `framed.len()` bytes,
@@ -324,5 +330,20 @@ mod tests {
             assert!(!text.contains("S-1-"));
             assert!(!text.contains("C:\\"));
         }
+    }
+
+    #[test]
+    fn diagnostics_export_uses_larger_decode_cap() {
+        assert_eq!(
+            decode_cap_for(&AdminRequest::ExportDiagnostics),
+            MAX_DIAG_CHUNK_BYTES,
+        );
+        assert_eq!(MAX_DIAG_CHUNK_BYTES, 65536);
+    }
+
+    #[test]
+    fn other_requests_use_control_decode_cap() {
+        assert_eq!(decode_cap_for(&AdminRequest::GetStatus), MAX_CONTROL_BYTES);
+        assert_eq!(MAX_CONTROL_BYTES, 4096);
     }
 }
