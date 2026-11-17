@@ -527,6 +527,20 @@ rg -q -F '& $env:MAKENSIS' "$WF" \
 ! rg -q -F '& makensis.exe' "$WF" \
   || { echo "FAIL workflow still uses bare & makensis.exe"; exit 1; }
 
+# NSIS Include directory guard: nsExec.nsh (and other bundled headers) live in
+# the Include directory next to makensis.exe. Derive it from MAKENSIS, fail
+# loudly when missing, and pass it to makensis via /I. Never edit the NSI script.
+rg -q -F '$nsisDir = Split-Path -Parent $env:MAKENSIS' "$WF" \
+  || { echo "FAIL workflow NSIS include dir not derived from MAKENSIS"; exit 1; }
+rg -q -F '$includeDir = Join-Path $nsisDir' "$WF" \
+  || { echo "FAIL workflow NSIS include dir not joined to 'Include'"; exit 1; }
+rg -q -F "'Include'" "$WF" \
+  || { echo "FAIL workflow NSIS include dir missing 'Include' literal"; exit 1; }
+rg -q -F 'Test-Path -LiteralPath $includeDir -PathType Container' "$WF" \
+  || { echo "FAIL workflow NSIS include dir existence check missing"; exit 1; }
+rg -q -F '/I$includeDir' "$WF" \
+  || { echo "FAIL workflow makensis invocation missing /I$includeDir"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \

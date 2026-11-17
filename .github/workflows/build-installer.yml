@@ -175,7 +175,13 @@ jobs:
           $stage = $env:KENALI_STAGE_DIR
           $script = Join-Path $env:GITHUB_WORKSPACE 'installer\kenali.nsi'
           $output = "kenali-$version-$env:TARGET_TRIPLE-setup.exe"
+          $nsisDir = Split-Path -Parent $env:MAKENSIS
+          $includeDir = Join-Path $nsisDir 'Include'
+          if (-not (Test-Path -LiteralPath $includeDir -PathType Container)) {
+            throw "NSIS Include directory not found: $includeDir"
+          }
           & $env:MAKENSIS `
+            "/I$includeDir" `
             "/DKENALI_VERSION=$version" `
             "/DKENALI_CLSID=$env:KENALI_CLSID" `
             "/DKENALI_STAGE_DIR=$stage" `
