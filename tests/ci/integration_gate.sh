@@ -502,6 +502,19 @@ rg -q -F 'kenali_cp.dll' "$WF" \
 rg -q -F 'kenali-cp.dll' "$WF" \
   || { echo "FAIL workflow fallback missing CP dll deliverable name: kenali-cp.dll"; exit 1; }
 
+# signtool location guard: CI locates signtool.exe under the Windows SDK and
+# never relies on a bare signtool.exe from PATH for signing.
+rg -q -F 'Locate signtool' "$WF" \
+  || { echo "FAIL workflow missing signtool discovery step"; exit 1; }
+rg -q -F 'Windows Kits' "$WF" \
+  || { echo "FAIL workflow signtool search path missing Windows Kits"; exit 1; }
+rg -q -F 'SIGNTOOL' "$WF" \
+  || { echo "FAIL workflow missing SIGNTOOL environment token"; exit 1; }
+rg -q -F '& $env:SIGNTOOL' "$WF" \
+  || { echo "FAIL workflow signing invocation missing $env:SIGNTOOL"; exit 1; }
+! rg -q -F '& signtool.exe' "$WF" \
+  || { echo "FAIL workflow still uses bare & signtool.exe"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \
