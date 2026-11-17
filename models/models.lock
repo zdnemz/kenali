@@ -1,0 +1,26 @@
+# Kenali model lock manifest
+#
+# Columns: name,url,sha256,licence,upstream_commit
+#
+# This file is COMMITTED; the weight files (*.onnx) and onnxruntime.dll are NOT.
+# `cargo xtask models fetch|verify` (developer tooling, a later wave) uses these
+# rows to fetch each asset into models/ and to verify its SHA-256 before any
+# ONNX session is created (context_pack.md §2 item 10, §3.4).
+#
+# HONESTY: no weight was downloaded, hashed or executed on the Linux authoring
+# host. The sha256 and upstream_commit values below are deliberately labelled
+# VERIFY placeholders -- they are NOT real digests/commits and must never be
+# mistaken for authoritative ones. An OWNER-RUN checklist in
+# docs/reports/models.md records how to fill them from upstream in the VM.
+# The URLs are plausible canonical sources but are also VERIFY (confirm the
+# exact asset name/revision against upstream before relying on them).
+#
+# name,url,sha256,licence,upstream_commit
+yunet.onnx,https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx,VERIFY:<fill-from-upstream>,MIT,VERIFY:<upstream-commit>
+sface.onnx,https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx,VERIFY:<fill-from-upstream>,Apache-2.0,VERIFY:<upstream-commit>
+minifasnet_v2.onnx,https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/raw/master/models/MiniFASNetV2.onnx,VERIFY:<fill-from-upstream>,Apache-2.0,VERIFY:<upstream-commit>
+minifasnet_v1se.onnx,https://github.com/minivision-ai/Silent-Face-Anti-Spoofing/raw/master/models/MiniFASNetV1SE.onnx,VERIFY:<fill-from-upstream>,Apache-2.0,VERIFY:<upstream-commit>
+# ORT runtime: Kenali's OWN pinned copy, tied to the `ort =2.0.0-rc.13` cargo
+# pin (which wraps ONNX Runtime 1.28). Must be loaded by absolute path via
+# ort::init_from(); see models/README.md. Licence MIT.
+onnxruntime.dll,https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-win-x64-1.28.0.zip,VERIFY:<fill-from-upstream>,MIT,VERIFY:<upstream-commit> ; ort =2.0.0-rc.13
