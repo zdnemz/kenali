@@ -490,6 +490,18 @@ for t in \
 done
 rg -q -- 'KENALI_CP_CLSID' "$WF" || { echo "FAIL workflow CLSID parse: KENALI_CP_CLSID"; exit 1; }
 
+# 3b. CP DLL staging name mapping: real Cargo output (kenali_cp) -> deliverable
+# (kenali-cp). This guards the GitHub Action failure where packaging looked for
+# a hyphenated source file that Cargo never emits.
+rg -q -F 'kenali_cp.dll' xtask/src/package.rs \
+  || { echo "FAIL package.rs missing real CP dll source name: kenali_cp.dll"; exit 1; }
+rg -q -F 'kenali-cp.dll' xtask/src/package.rs \
+  || { echo "FAIL package.rs missing CP dll deliverable name: kenali-cp.dll"; exit 1; }
+rg -q -F 'kenali_cp.dll' "$WF" \
+  || { echo "FAIL workflow fallback missing real CP dll source name: kenali_cp.dll"; exit 1; }
+rg -q -F 'kenali-cp.dll' "$WF" \
+  || { echo "FAIL workflow fallback missing CP dll deliverable name: kenali-cp.dll"; exit 1; }
+
 # CI doc owner-run warning
 rg -qi 'owner[- ]run' "$CIDOC" || { echo "FAIL CI doc owner-run warning"; exit 1; }
 rg -q -F -- 'docs/dev_safety_runbook.md' "$CIDOC" \

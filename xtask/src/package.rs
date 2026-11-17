@@ -9,27 +9,35 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The exact release binaries that must be staged, with their real extensions.
-const BINARIES: [&str; 4] = [
-    "kenali-svc.exe",
-    "kenali-cp.dll",
-    "kenali-ui.exe",
-    "kenali.exe",
+/// Source (real Cargo build output) -> staged deliverable name pairs.
+///
+/// Cargo rejects hyphens in library target names, so the `kenali-cp` cdylib is
+/// emitted as `kenali_cp.dll` / `kenali_cp.pdb`. All other artifacts use their
+/// build filename verbatim. The table is the single source of truth for both
+/// required binaries and optional PDBs.
+const STAGING_PAIRS: [(&str, &str); 8] = [
+    ("kenali-svc.exe", "kenali-svc.exe"),
+    ("kenali-svc.pdb", "kenali-svc.pdb"),
+    ("kenali_cp.dll", "kenali-cp.dll"),
+    ("kenali_cp.pdb", "kenali-cp.pdb"),
+    ("kenali-ui.exe", "kenali-ui.exe"),
+    ("kenali-ui.pdb", "kenali-ui.pdb"),
+    ("kenali.exe", "kenali.exe"),
+    ("kenali.pdb", "kenali.pdb"),
 ];
 
-/// Build the ordered list of (file name, required) pairs for all pinned
-/// binaries. Kept separate from staging so it is testable on any host.
-fn staging_plan() -> Vec<(String, bool)> {
-    let mut plan = Vec::with_capacity(BINARIES.len() * 2);
-    for name in BINARIES {
-        let stem = name
-            .strip_suffix(".exe")
-            .or_else(|| name.strip_suffix(".dll"))
-            .unwrap_or(name);
-        plan.push((name.to_owned(), true));
-        plan.push((format!("{stem}.pdb"), false));
-    }
-    plan
+/// Build the ordered list of (source name, destination name, required) triples
+/// for all pinned binaries. Kept separate from staging so it is testable on any
+/// host.
+fn staging_plan() -> Vec<(String, String, bool)> {
+    STAGING_PAIRS
+        .iter()
+        .map(|(source, deliverable)| {
+            // PDBs are optional build byproducts; the four deliverables are not.
+            let required = !deliverable.ends_with(".pdb");
+            ((*source).to_owned(), (*deliverable).to_owned(), required)
+        })
+        .collect()
 }
 
 /// The release directory produced by the MSVC target build.
@@ -55,8 +63,8 @@ pub fn package() -> anyhow::Result<()> {
 
     let mut staged = 0usize;
     let plan = staging_plan();
-    for (file, required) in &plan {
-        let from = src.join(file);
+    for (source, deliverable, required) in &plan {
+        let from = src.join(source);
         if !from.is_file() {
             // The matching PDB is optional; a pinned binary is required.
             if !required {
@@ -64,10 +72,10 @@ pub fn package() -> anyhow::Result<()> {
             }
             bail!("package: required binary missing: {}", from.display());
         }
-        let to = dst.join(file);
+        let to = dst.join(deliverable);
         fs::copy(&from, &to)
             .with_context(|| format!("copying {} to {}", from.display(), to.display()))?;
-        println!("  staged {file}");
+        println!("  staged {deliverable}");
         staged += 1;
     }
 
@@ -101,31 +109,61 @@ mod tests {
     fn staging_plan_has_exactly_the_four_pinned_binaries_and_their_pdbs() {
         let plan = staging_plan();
         let expected = [
-            ("kenali-svc.exe", true),
-            ("kenali-svc.pdb", false),
-            ("kenali-cp.dll", true),
-            ("kenali-cp.pdb", false),
-            ("kenali-ui.exe", true),
-            ("kenali-ui.pdb", false),
-            ("kenali.exe", true),
-            ("kenali.pdb", false),
+            ("kenali-svc.exe", "kenali-svc.exe", true),
+            ("kenali-svc.pdb", "kenali-svc.pdb", false),
+            ("kenali_cp.dll", "kenali-cp.dll", true),
+            ("kenali_cp.pdb", "kenali-cp.pdb", false),
+            ("kenali-ui.exe", "kenali-ui.exe", true),
+            ("kenali-ui.pdb", "kenali-ui.pdb", false),
+            ("kenali.exe", "kenali.exe", true),
+            ("kenali.pdb", "kenali.pdb", false),
         ];
-        let actual: Vec<(&str, bool)> = plan
+        let actual: Vec<(&str, &str, bool)> = plan
             .iter()
-            .map(|(name, required)| (name.as_str(), *required))
+            .map(|(source, deliverable, required)| {
+                (source.as_str(), deliverable.as_str(), *required)
+            })
             .collect();
         assert_eq!(actual, expected);
 
         // Exactly four files are required, one for each pinned binary.
         let required: Vec<&str> = plan
             .iter()
-            .filter(|(_, required)| *required)
-            .map(|(name, _)| name.as_str())
+            .filter(|(_, _, required)| *required)
+            .map(|(_, deliverable, _)| deliverable.as_str())
             .collect();
         assert_eq!(required, ["kenali-svc.exe", "kenali-cp.dll", "kenali-ui.exe", "kenali.exe"]);
 
         // Never invent a cross-extension required file (the CI failure mode).
-        assert!(!plan.iter().any(|(name, _)| name == "kenali-svc.dll"));
+        assert!(!plan.iter().any(|(source, _, _)| source == "kenali-svc.dll"));
+    }
+
+    #[test]
+    fn staging_plan_maps_real_cargo_output_to_deliverable_names() {
+        let plan = staging_plan();
+
+        // The CP cdylib is built with an underscore (Cargo forbids hyphens in
+        // lib target names) but staged/signed with the hyphen deliverable name.
+        let cp = plan
+            .iter()
+            .find(|(_, deliverable, _)| deliverable == "kenali-cp.dll")
+            .expect("kenali-cp.dll deliverable must be staged");
+        assert_eq!(cp.0, "kenali_cp.dll");
+        assert!(cp.2);
+
+        let cp_pdb = plan
+            .iter()
+            .find(|(_, deliverable, _)| deliverable == "kenali-cp.pdb")
+            .expect("kenali-cp.pdb deliverable must be staged");
+        assert_eq!(cp_pdb.0, "kenali_cp.pdb");
+        assert!(!cp_pdb.2);
+
+        // No source file is ever required under the hyphenated deliverable
+        // name; the release dir only contains the underscore build output.
+        assert!(!plan.iter().any(|(source, _, required)| {
+            *required && source == "kenali-cp.dll"
+        }));
+        assert!(!plan.iter().any(|(source, _, _)| source.contains('-') && source.ends_with(".dll")));
     }
 
     #[test]

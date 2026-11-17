@@ -64,13 +64,30 @@ jobs:
             'kenali-ui.exe',
             'kenali.exe'
           )
+          # Cargo emits the cp cdylib as kenali_cp.dll (hyphens are invalid in
+          # lib target names); NSIS/signing consume the hyphenated deliverable.
+          $sourceNames = @{
+            'kenali-cp.dll' = 'kenali_cp.dll'
+          }
           foreach ($binary in $binaries) {
             $staged = Join-Path $stage $binary
+            $sourceName = $sourceNames[$binary]
+            if (-not $sourceName) { $sourceName = $binary }
             if (-not (Test-Path -LiteralPath $staged -PathType Leaf)) {
-              Copy-Item -LiteralPath (Join-Path $release $binary) -Destination $staged -Force
+              Copy-Item -LiteralPath (Join-Path $release $sourceName) -Destination $staged -Force
             }
             if (-not (Test-Path -LiteralPath $staged -PathType Leaf)) {
               throw "Missing staged binary: $binary"
+            }
+            # Stage the matching PDB under its deliverable name when present.
+            $pdb = [System.IO.Path]::ChangeExtension($binary, '.pdb')
+            $stagedPdb = Join-Path $stage $pdb
+            if (-not (Test-Path -LiteralPath $stagedPdb -PathType Leaf)) {
+              $sourcePdb = [System.IO.Path]::ChangeExtension($sourceName, '.pdb')
+              $releasePdb = Join-Path $release $sourcePdb
+              if (Test-Path -LiteralPath $releasePdb -PathType Leaf) {
+                Copy-Item -LiteralPath $releasePdb -Destination $stagedPdb -Force
+              }
             }
           }
 
